@@ -1,0 +1,5 @@
+package com.example.torneos.enums;
+
+public enum FaseActual {
+    FASE_GRUPOS,FINAL,SEMIFINAL,CUARTOS,OCTAVOS,DIECISEISAVOS,TREINTAIDOSAVOS,ELIMINATORIAS_GRUPOS
+}
