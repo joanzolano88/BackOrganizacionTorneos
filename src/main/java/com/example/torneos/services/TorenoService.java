@@ -29,10 +29,10 @@ public class TorenoService {
 
     public Torneo save(Torneo torneo, Reglamento reglamento) {
         torneo.setEstadoTorneo(EstadoTorneo.INSCRIPCIONES);
-        FaseActual[] faseActuals = FaseActual.values();
+        /*FaseActual[] faseActuals = FaseActual.values();
         if (torneo.getCantidadEquipos() >= Math.pow(2,torneo.getFaseInicioEliminatorias().ordinal())) {
 
-        }
+        }*/
         torneo = torneoDao.save(torneo);
         //reglamento.setTorneo(torneo);
         //reglamentoDao.save(reglamento);
