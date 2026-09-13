@@ -36,4 +36,7 @@ public class Torneo {
     @JoinColumn
     @ManyToOne
     private Ciudad ciudad;
+    @JoinColumn
+    @ManyToOne
+    private Deporte deporte;
 }

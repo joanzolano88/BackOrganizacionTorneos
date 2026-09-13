@@ -33,6 +33,15 @@ public class PartidoRest {
     public List<List<Partido>> getTorneoFaseActual(@PathVariable long idTorneo, @PathVariable FaseActual faseActual){
         return partidoService.getTorneoFaseActual(idTorneo, faseActual);
     }
+    @GetMapping("torneo/fase/{idTorneo}/{faseActual}")
+    public List<List<Partido>> getTorneoFaseFiltrada(
+            @PathVariable long idTorneo,
+            @PathVariable FaseActual faseActual,
+            @RequestParam(defaultValue = "PENDIENTE") String estado,
+            @RequestParam(defaultValue = "false") boolean sinProgramar,
+            @RequestParam(defaultValue = "") String equipo) {
+        return partidoService.getTorneoFaseFiltrada(idTorneo, faseActual, estado, sinProgramar, equipo);
+    }
     @GetMapping("estado/{estado}")
     public List<Partido> getPartidosEstado(@PathVariable EstadoPartido estado){
         return partidoService.getPartidosEstado(estado);

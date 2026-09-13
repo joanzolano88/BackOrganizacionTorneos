@@ -17,7 +17,8 @@ public class InformacionPersona extends InformacionContacto{
     private byte[]  foto;
     //@JoinColumn
     //@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.REMOVE)
-    @Basic(fetch = FetchType.LAZY)
-    @Lob
-    private byte[] identificacion;
+    //@Basic(fetch = FetchType.LAZY)
+    //@Lob
+    @Column(unique = true)
+    private String identificacion;
 }

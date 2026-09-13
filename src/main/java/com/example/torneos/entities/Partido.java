@@ -45,6 +45,9 @@ public class Partido {
     @JoinColumn
     @ManyToOne
     private Torneo torneo;
+    @OneToMany(mappedBy = "partido", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties("partido")
+    private List<ConvocatoriaPartido> convocatorias;
     @Transient
     private List<Arbitro>listaArbitros;
 }

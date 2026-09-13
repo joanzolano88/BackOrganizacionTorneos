@@ -1,17 +1,21 @@
 package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoGrupoEquipo;
+import com.example.torneos.DTO.DtoGrupoLlave;
 import com.example.torneos.DTO.DtoOptionTorneo;
 import com.example.torneos.DTO.DtoDistribucionEquipo;
+import com.example.torneos.entities.GrupoLlave;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Reglamento;
 import com.example.torneos.entities.Torneo;
+import com.example.torneos.enums.FaseActual;
 import com.example.torneos.services.TorenoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,10 +29,9 @@ public class TorenoRest {
     @Autowired
     private TorenoService torenoService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public Torneo save(@RequestBody @RequestParam("objeto") String torneoS) throws JsonMappingException, JsonProcessingException, IOException {
-        //@RequestBody @RequestParam("archivo") MultipartFile file
+    public Torneo save(@RequestPart("objeto") String torneoS) throws JsonMappingException, JsonProcessingException, IOException {
         ObjectMapper mapper = new ObjectMapper();
         Torneo torneo = mapper.readValue(torneoS, Torneo.class);
         //Reglamento reglamento = new Reglamento();
@@ -59,6 +62,16 @@ public class TorenoRest {
     @GetMapping("/{idTorneo}/distribucion")
     public List<DtoDistribucionEquipo> getDistribucion(@PathVariable long idTorneo) {
         return torenoService.getDistribucion(idTorneo);
+    }
+
+    @GetMapping("/{idTorneo}/grupo-llave/{faseTorneo}")
+    public List<GrupoLlave> getGrupoLlave(@PathVariable long idTorneo, @PathVariable FaseActual faseTorneo) {
+        return torenoService.getGrupoLlave(idTorneo, faseTorneo);
+    }
+
+    @PutMapping("/{idTorneo}/grupo-llave")
+    public List<GrupoLlave> guardarGrupoLlave(@PathVariable long idTorneo, @RequestBody List<DtoGrupoLlave> grupos) {
+        return torenoService.guardarGrupoLlave(idTorneo, grupos);
     }
 
     @GetMapping("/usuario/{id}")

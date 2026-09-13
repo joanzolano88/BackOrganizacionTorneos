@@ -36,6 +36,8 @@ public interface PartidoDao extends JpaRepository<Partido, Long> {
     List<Partido> findByTorneoAndFaseEncuentroIn(Torneo torneo, List<FaseActual> listaFaseActual);
     @Transactional
     List<Partido> findByTorneoAndFaseEncuentro(Torneo torneo, FaseActual faseActual);
+    List<Partido> findByTorneoAndFaseEncuentroAndEstadoPartido(Torneo torneo, FaseActual faseActual, EstadoPartido estadoPartido);
+    List<Partido> findByTorneoAndFaseEncuentroAndFechaPartidoIsNull(Torneo torneo, FaseActual faseActual);
     @Transactional
     List<Partido> findByGrupoAndTorneoAndFaseEncuentro(int i, Torneo torneo, FaseActual faseActual);
 }

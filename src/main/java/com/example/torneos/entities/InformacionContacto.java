@@ -12,6 +12,8 @@ public class InformacionContacto {
     private long id;
     @Column(unique = true)
     private String numeroCelular;
+    @Column(unique = true)
+    private String cedula;
     private String numeroTelefono;
     private boolean whatsappActivo;
     private String correoElectronico;

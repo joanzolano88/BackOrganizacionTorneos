@@ -33,9 +33,9 @@ public class UsuarioRest {
         if (fileF != null) {
             usuario.setFoto(fileF.getBytes());
         }
-        if (fileI != null){
+        /*if (fileI != null){
             usuario.setIdentificacion(fileI.getBytes());
-        }
+        }*/
         return usuarioService.save(usuario);
     }
 

@@ -31,9 +31,9 @@ public class PersonaRest {
         if (fileF != null) {
             persona.setFoto(fileF.getBytes());
         }
-        if (fileI != null){
+        /*if (fileI != null){
             persona.setIdentificacion(fileI.getBytes());
-        }
+        }*/
         return personaService.save(persona);
     }
 

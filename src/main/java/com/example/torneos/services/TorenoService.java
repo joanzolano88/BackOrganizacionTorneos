@@ -1,6 +1,7 @@
 package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoGrupoEquipo;
+import com.example.torneos.DTO.DtoGrupoLlave;
 import com.example.torneos.DTO.DtoOptionTorneo;
 import com.example.torneos.DTO.DtoDistribucionEquipo;
 import com.example.torneos.dao.*;
@@ -13,8 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.text.Normalizer;
+import java.util.stream.Collectors;
 
 @Service
 public class TorenoService {
@@ -30,6 +33,8 @@ public class TorenoService {
     private EquipoDao equipoDao;
     @Autowired
     private DistribucionEquipoTorneoDao distribucionDao;
+    @Autowired
+    private GrupoLlaveDao grupoLlaveDao;
 
     private String normalizarUbicacion(String ubicacion) {
         return Normalizer.normalize(ubicacion == null ? "" : ubicacion, Normalizer.Form.NFD)
@@ -95,9 +100,24 @@ public class TorenoService {
         return torneoList;
     }
     public void cabiarFaseTorneo(List<DtoGrupoEquipo> listGrupoEquipo, long idTorneo) {
+        if (listGrupoEquipo == null || listGrupoEquipo.isEmpty()) {
+            throw new IllegalArgumentException("Debes organizar al menos un equipo");
+        }
         Torneo torneo = torneoDao.findById(idTorneo).get();
-        distribucionDao.deleteAll(distribucionDao.findByTorneoAndFase(torneo, listGrupoEquipo.get(0).getFaseActual()));
-        torneo.setFaseTorneo(listGrupoEquipo.get(0).getFaseActual());
+        boolean organizacionInicial = torneo.getEstadoTorneo() == EstadoTorneo.INSCRIPCIONES ||
+                torneo.getEstadoTorneo() == EstadoTorneo.INSCRIPCIONES_ACTIVO;
+        FaseActual faseInicial = torneo.getModalidadTorneo() == ModalidadTorneo.ELIMINATORIAS &&
+            torneo.getFaseInicioEliminatorias() != null
+            ? torneo.getFaseInicioEliminatorias()
+            : torneo.getFaseTorneo();
+        FaseActual faseDestino = organizacionInicial
+            ? faseInicial
+                : listGrupoEquipo.get(0).getFaseActual();
+        if (faseDestino == null) {
+            faseDestino = FaseActual.FASE_GRUPOS;
+        }
+        distribucionDao.deleteAll(distribucionDao.findByTorneoAndFase(torneo, faseDestino));
+        torneo.setFaseTorneo(faseDestino);
         for (int i = 0; i < listGrupoEquipo.size(); i++) {
             DtoGrupoEquipo grupoEquipo = listGrupoEquipo.get(i);
             Equipo equipo = equipoDao.findById(grupoEquipo.getIdEquipo()).get();
@@ -128,37 +148,157 @@ public class TorenoService {
                     }
                 }
             }
-            equipo.setFaseActual(grupoEquipo.getFaseActual());
+            equipo.setFaseActual(faseDestino);
             equipoDao.save(equipo);
             DistribucionEquipoTorneo distribucion = new DistribucionEquipoTorneo();
             distribucion.setTorneo(torneo);
             distribucion.setEquipo(equipo);
-            distribucion.setFase(grupoEquipo.getFaseActual());
+            distribucion.setFase(faseDestino);
             distribucion.setGrupo(grupoEquipo.getGrupo());
             distribucionDao.save(distribucion);
         }
+        if (organizacionInicial) {
+            generarPartidosDeFase(torneo, listGrupoEquipo, faseDestino);
+            torneo.setEstadoTorneo(EstadoTorneo.ACTIVO);
+        }
         torneoDao.save(torneo);
+    }
+
+    public List<GrupoLlave> getGrupoLlave(long idTorneo, FaseActual faseTorneo) {
+        Torneo torneo = getById(idTorneo);
+        List<GrupoLlave> grupos = grupoLlaveDao.findByTorneoAndFaseTorneoOrderByGrupoLlaveAscPuntosDescGolesFavorDesc(torneo, faseTorneo);
+        Map<Long, GrupoLlave> gruposPorEquipo = grupos.stream()
+                .collect(Collectors.toMap(grupo -> grupo.getEquipo().getId(), grupo -> grupo, (anterior, actual) -> actual));
+        return equipoDao.findByTorneo(torneo).stream()
+                .filter(equipo -> equipo.getFaseActual() != null)
+                .map(equipo -> {
+                    GrupoLlave grupo = gruposPorEquipo.getOrDefault(equipo.getId(), new GrupoLlave());
+                    grupo.setEquipo(equipo);
+                    if (!gruposPorEquipo.containsKey(equipo.getId())) {
+                        grupo.setGrupoLlave(0);
+                    }
+                    grupo.setTorneo(torneo);
+                    grupo.setFaseTorneo(faseTorneo);
+                    return grupo;
+                }).toList();
+    }
+
+    @Transactional
+    public List<GrupoLlave> guardarGrupoLlave(long idTorneo, List<DtoGrupoLlave> grupos) {
+        if (grupos == null || grupos.isEmpty() || grupos.stream().anyMatch(grupo -> grupo.getIdEquipo() <= 0 || grupo.getGrupoLlave() <= 0)) {
+            throw new IllegalArgumentException("Todos los equipos deben pertenecer a un grupo o llave");
+        }
+        Torneo torneo = getById(idTorneo);
+        FaseActual fase = grupos.get(0).getFaseTorneo();
+        if (fase == null) {
+            fase = torneo.getFaseTorneo();
+        }
+        boolean primeraFase = torneo.getEstadoTorneo() == EstadoTorneo.INSCRIPCIONES ||
+                torneo.getEstadoTorneo() == EstadoTorneo.INSCRIPCIONES_ACTIVO;
+        if (primeraFase && torneo.getModalidadTorneo() == ModalidadTorneo.ELIMINATORIAS && torneo.getFaseInicioEliminatorias() != null) {
+            fase = torneo.getFaseInicioEliminatorias();
+        }
+        grupoLlaveDao.deleteByTorneoAndFaseTorneo(torneo, fase);
+        List<GrupoLlave> guardados = new ArrayList<>();
+        for (DtoGrupoLlave grupo : grupos) {
+            Equipo equipo = equipoDao.findById(grupo.getIdEquipo()).orElseThrow(() -> new IllegalArgumentException("El equipo no existe"));
+            GrupoLlave grupoLlave = new GrupoLlave();
+            grupoLlave.setEquipo(equipo);
+            grupoLlave.setGrupoLlave(grupo.getGrupoLlave());
+            grupoLlave.setTorneo(torneo);
+            grupoLlave.setFaseTorneo(fase);
+            guardados.add(grupoLlaveDao.save(grupoLlave));
+        }
+        long equiposAceptados = equipoDao.findByTorneo(torneo).stream()
+            .filter(equipo -> equipo.getFaseActual() != null)
+            .count();
+        boolean distribucionCompleta = guardados.size() == equiposAceptados;
+        if (primeraFase) {
+            crearPartidosDesdeGrupoLlave(torneo, guardados, fase);
+            torneo.setFaseTorneo(fase);
+            torneo.setEstadoTorneo(distribucionCompleta ? EstadoTorneo.ACTIVO : EstadoTorneo.INSCRIPCIONES_ACTIVO);
+            torneoDao.save(torneo);
+        }
+        return guardados;
+    }
+
+    private void crearPartidosDesdeGrupoLlave(Torneo torneo, List<GrupoLlave> grupos, FaseActual fase) {
+        for (int i = 0; i < grupos.size(); i++) {
+            for (int j = i + 1; j < grupos.size(); j++) {
+                GrupoLlave primero = grupos.get(i);
+                GrupoLlave segundo = grupos.get(j);
+                if (primero.getGrupoLlave() != segundo.getGrupoLlave()) {
+                    continue;
+                }
+                crearPartidoSiNoExiste(torneo, fase, primero.getEquipo(), segundo.getEquipo(), primero.getGrupoLlave());
+                ModalidadFase modalidad = fase == FaseActual.FASE_GRUPOS || fase == FaseActual.ELIMINATORIAS_GRUPOS
+                        ? torneo.getModalidadGrupos() : torneo.getModalidadEliminatorias();
+                if (modalidad == ModalidadFase.IDA_VUELTA) {
+                    crearPartidoSiNoExiste(torneo, fase, segundo.getEquipo(), primero.getEquipo(), segundo.getGrupoLlave());
+                }
+            }
+        }
+    }
+
+    private void generarPartidosDeFase(Torneo torneo, List<DtoGrupoEquipo> equipos, FaseActual fase) {
+        for (int i = 0; i < equipos.size(); i++) {
+            for (int j = i + 1; j < equipos.size(); j++) {
+                DtoGrupoEquipo primero = equipos.get(i);
+                DtoGrupoEquipo segundo = equipos.get(j);
+                boolean mismoGrupo = primero.getGrupo() == segundo.getGrupo();
+                if (!mismoGrupo) {
+                    continue;
+                }
+                Equipo equipoLocal = equipoDao.findById(primero.getIdEquipo()).orElseThrow();
+                Equipo equipoVisitante = equipoDao.findById(segundo.getIdEquipo()).orElseThrow();
+                crearPartido(torneo, fase, equipoLocal, equipoVisitante);
+                ModalidadFase modalidad = fase == FaseActual.FASE_GRUPOS || fase == FaseActual.ELIMINATORIAS_GRUPOS
+                        ? torneo.getModalidadGrupos()
+                        : torneo.getModalidadEliminatorias();
+                if (modalidad == ModalidadFase.IDA_VUELTA) {
+                    crearPartido(torneo, fase, equipoVisitante, equipoLocal);
+                }
+            }
+        }
+    }
+
+    private void crearPartido(Torneo torneo, FaseActual fase, Equipo local, Equipo visitante) {
+        crearPartido(torneo, fase, local, visitante, local.getGrupo());
+    }
+
+    private void crearPartido(Torneo torneo, FaseActual fase, Equipo local, Equipo visitante, int grupo) {
+        Partido partido = new Partido();
+        partido.setTorneo(torneo);
+        partido.setGrupo(grupo);
+        partido.setEstadoPartido(EstadoPartido.PENDIENTE);
+        partido.setFaseEncuentro(fase);
+        partido.setEquipoLocal(local);
+        partido.setEquipoVisitante(visitante);
+        partidoDao.save(partido);
+    }
+
+    private void crearPartidoSiNoExiste(Torneo torneo, FaseActual fase, Equipo local, Equipo visitante, int grupo) {
+        if (partidoDao.findByTorneoAndEquipoLocalAndEquipoVisitanteAndFaseEncuentro(torneo, local, visitante, fase) == null) {
+            crearPartido(torneo, fase, local, visitante, grupo);
+        }
     }
 
     public List<DtoDistribucionEquipo> getDistribucion(long idTorneo) {
         Torneo torneo = getById(idTorneo);
         List<DistribucionEquipoTorneo> distribuciones = distribucionDao.findByTorneoAndFase(torneo, torneo.getFaseTorneo());
-        if (distribuciones.isEmpty()) {
-            return equipoDao.findByTorneoAndFaseActual(torneo, torneo.getFaseTorneo()).stream().map(equipo -> {
-                DtoDistribucionEquipo dto = new DtoDistribucionEquipo();
-                dto.setIdEquipo(equipo.getId());
-                dto.setNombreEquipo(equipo.getNombre());
-                dto.setFase(torneo.getFaseTorneo());
-                dto.setGrupo(equipo.getGrupo());
-                return dto;
-            }).toList();
-        }
-        return distribuciones.stream().map(distribucion -> {
+        Map<Long, Integer> gruposPorEquipo = distribuciones.stream()
+                .collect(Collectors.toMap(
+                        distribucion -> distribucion.getEquipo().getId(),
+                        DistribucionEquipoTorneo::getGrupo,
+                        (grupoAnterior, grupoActual) -> grupoActual));
+        return equipoDao.findByTorneo(torneo).stream()
+                .filter(equipo -> equipo.getFaseActual() != null)
+                .map(equipo -> {
             DtoDistribucionEquipo dto = new DtoDistribucionEquipo();
-            dto.setIdEquipo(distribucion.getEquipo().getId());
-            dto.setNombreEquipo(distribucion.getEquipo().getNombre());
-            dto.setFase(distribucion.getFase());
-            dto.setGrupo(distribucion.getGrupo());
+            dto.setIdEquipo(equipo.getId());
+            dto.setNombreEquipo(equipo.getNombre());
+            dto.setFase(torneo.getFaseTorneo());
+            dto.setGrupo(gruposPorEquipo.getOrDefault(equipo.getId(), 0));
             return dto;
         }).toList();
     }
