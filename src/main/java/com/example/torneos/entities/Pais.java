@@ -1,23 +1,18 @@
 package com.example.torneos.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
 import lombok.Data;
 
-@Data
 @Entity
+@Data
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true)
-public class Cancha {
+public class Pais {
     @Id
     @GeneratedValue
     private long id;
-    private double largo;
-    private double ancho;
+
     private String nombre;
-    private double latitud;
-    private double longitud;
-    private String direccion;
-    @JoinColumn
-    @ManyToOne
-    private Torneo torneo;
 }

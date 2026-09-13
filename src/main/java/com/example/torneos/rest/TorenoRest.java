@@ -2,6 +2,7 @@ package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoGrupoEquipo;
 import com.example.torneos.DTO.DtoOptionTorneo;
+import com.example.torneos.DTO.DtoDistribucionEquipo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Reglamento;
 import com.example.torneos.entities.Torneo;
@@ -53,6 +54,11 @@ public class TorenoRest {
     @PutMapping("/cambiar_fase_torneo/{idTorneo}")
     public void cabiarFaseTorneo(@RequestBody List<DtoGrupoEquipo> listGrupoEquipo, @PathVariable long idTorneo) {
         torenoService.cabiarFaseTorneo(listGrupoEquipo, idTorneo);
+    }
+
+    @GetMapping("/{idTorneo}/distribucion")
+    public List<DtoDistribucionEquipo> getDistribucion(@PathVariable long idTorneo) {
+        return torenoService.getDistribucion(idTorneo);
     }
 
     @GetMapping("/usuario/{id}")

@@ -4,20 +4,17 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 
-@Data
 @Entity
+@Data
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true)
-public class Cancha {
+public class Departamento {
     @Id
     @GeneratedValue
     private long id;
-    private double largo;
-    private double ancho;
+
     private String nombre;
-    private double latitud;
-    private double longitud;
-    private String direccion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn
-    @ManyToOne
-    private Torneo torneo;
+    private Pais pais;
 }

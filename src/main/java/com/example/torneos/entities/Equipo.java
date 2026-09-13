@@ -1,6 +1,7 @@
 package com.example.torneos.entities;
 
 import com.example.torneos.enums.FaseActual;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -8,6 +9,7 @@ import java.util.List;
 
 @Data
 @Entity
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true)
 public class Equipo {
     @Id
     @GeneratedValue

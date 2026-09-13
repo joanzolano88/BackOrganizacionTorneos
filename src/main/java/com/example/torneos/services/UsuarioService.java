@@ -22,11 +22,14 @@ public class UsuarioService {
     }
     public DtoUsuarioInfo iniciarSesion(DtoLoginInfo dtoLoginInfo) {
         Usuario usuario = usuarioDao.findByNumeroCelular(dtoLoginInfo.getIdentificacion());
-        if (usuario != null && usuario.getContrasena().equals(dtoLoginInfo.getContrasena()) && usuario.getNumeroCelular().equals(dtoLoginInfo.getIdentificacion())){
-            usuario.setContrasena("");
+        if (usuario != null && usuario.getContrasena() != null && usuario.getContrasena().equals(dtoLoginInfo.getContrasena()) &&
+                usuario.getNumeroCelular() != null && usuario.getNumeroCelular().equals(dtoLoginInfo.getIdentificacion())){
             DtoUsuarioInfo usuarioInfo = new DtoUsuarioInfo();
             usuarioInfo.setId(usuario.getId());
             usuarioInfo.setTipoUsuario(usuario.getTipoUsuario());
+            usuarioInfo.setNombre(usuario.getNombre());
+            usuarioInfo.setNumeroCelular(usuario.getNumeroCelular());
+            usuarioInfo.setUbicacion(usuario.getUbicacion());
             return usuarioInfo;
         }
         throw  new IllegalArgumentException("Numero celular o contraseña invalido");
@@ -51,6 +54,7 @@ public class UsuarioService {
         usuarioDB.setNumeroCelular(usuario.getNumeroCelular());
         usuarioDB.setNumeroTelefono(usuario.getNumeroTelefono());
         usuarioDB.setWhatsappActivo(usuario.isWhatsappActivo());
+        usuarioDB.setUbicacion(usuario.getUbicacion());
         return usuarioDao.save(usuarioDB);
     }
     public void delete(long id) {

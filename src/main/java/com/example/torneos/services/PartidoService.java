@@ -171,15 +171,58 @@ public class PartidoService {
         }
     }
     public Partido asignarFecha(Partido partido) {
-        partido.setCancha(canchaDao.findById(partido.getCancha().getId()).get());
-
-        List<Partido> listaPartido = partidoDao.findByCanchaAndFechaPartidoBetween(partido.getCancha(), partido.getFechaPartido().minusHours(1).minusMinutes(59), partido.getFechaPartido().plusHours(1).minusMinutes(59));
-        if(listaPartido.isEmpty()){
-            partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
-            return partidoDao.save(partido);
+        if (partido == null || partido.getId() == 0 || partido.getFechaPartido() == null || partido.getCancha() == null) {
+            throw new IllegalArgumentException("El partido, la fecha y la cancha son obligatorios");
         }
-        throw new IllegalArgumentException("Ya hay partido programado en " + partido.getCancha().getNombre() + " en esa fecha y hora");
+        Partido partidoProgramado = partidoDao.findById(partido.getId()).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        partidoProgramado.setFechaPartido(partido.getFechaPartido());
+        partidoProgramado.setCancha(canchaDao.findById(partido.getCancha().getId()).orElseThrow(() -> new IllegalArgumentException("La cancha no existe")));
+        List<Partido> listaPartido = partidoDao.findByCanchaAndFechaPartidoBetween(partidoProgramado.getCancha(), partidoProgramado.getFechaPartido().minusHours(1).minusMinutes(59), partidoProgramado.getFechaPartido().plusHours(1).minusMinutes(59));
+        if (listaPartido.stream().anyMatch(otro -> otro.getId() != partidoProgramado.getId())) {
+            throw new IllegalArgumentException("Ya hay un partido programado en " + partidoProgramado.getCancha().getNombre() + " cerca de esa fecha y hora");
+        }
 
+        LocalDateTime inicio = partidoProgramado.getFechaPartido();
+        List<Partido> partidosEquipo = partidoDao.findAll().stream()
+                .filter(otro -> otro.getId() != partidoProgramado.getId())
+                .filter(otro -> otro.getFechaPartido() != null)
+                .filter(otro -> otro.getEstadoPartido() == EstadoPartido.PROGRAMADO ||
+                        otro.getEstadoPartido() == EstadoPartido.EN_PROCESO)
+                .filter(otro -> mismoEquipo(partidoProgramado, otro))
+                .toList();
+        int duracionPartido = duracionTorneo(partidoProgramado.getTorneo());
+        LocalDateTime finConDescanso = inicio.plusMinutes(duracionPartido + 60L);
+        for (Partido otro : partidosEquipo) {
+            int duracionOtro = duracionTorneo(otro.getTorneo());
+            LocalDateTime inicioOtro = otro.getFechaPartido();
+            LocalDateTime finOtroConDescanso = inicioOtro.plusMinutes(duracionOtro + 60L);
+            boolean seCruza = inicio.isBefore(finOtroConDescanso) && inicioOtro.isBefore(finConDescanso);
+            if (seCruza) {
+                throw new IllegalArgumentException("El equipo " + nombreEquipoComun(partidoProgramado, otro) + " no tiene una hora de descanso suficiente entre partidos");
+            }
+        }
+        partidoProgramado.setEstadoPartido(EstadoPartido.PROGRAMADO);
+        return partidoDao.save(partidoProgramado);
+
+    }
+
+    private int duracionTorneo(Torneo torneo) {
+        return torneo != null && torneo.getDuracionMinutos() > 0 ? torneo.getDuracionMinutos() : 90;
+    }
+
+    private boolean mismoEquipo(Partido primero, Partido segundo) {
+        long local = primero.getEquipoLocal() == null ? 0 : primero.getEquipoLocal().getId();
+        long visitante = primero.getEquipoVisitante() == null ? 0 : primero.getEquipoVisitante().getId();
+        long otroLocal = segundo.getEquipoLocal() == null ? 0 : segundo.getEquipoLocal().getId();
+        long otroVisitante = segundo.getEquipoVisitante() == null ? 0 : segundo.getEquipoVisitante().getId();
+        return local == otroLocal || local == otroVisitante || visitante == otroLocal || visitante == otroVisitante;
+    }
+
+    private String nombreEquipoComun(Partido primero, Partido segundo) {
+        if (primero.getEquipoLocal() != null && (primero.getEquipoLocal().equals(segundo.getEquipoLocal()) || primero.getEquipoLocal().equals(segundo.getEquipoVisitante()))) {
+            return primero.getEquipoLocal().getNombre();
+        }
+        return primero.getEquipoVisitante() == null ? "seleccionado" : primero.getEquipoVisitante().getNombre();
     }
     public Partido getById(long idParido) {
         Partido partido = partidoDao.findById(idParido).get();
