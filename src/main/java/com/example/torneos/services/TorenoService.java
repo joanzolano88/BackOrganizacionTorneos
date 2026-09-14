@@ -164,6 +164,7 @@ public class TorenoService {
         torneoDao.save(torneo);
     }
 
+    @Transactional(readOnly = true)
     public List<GrupoLlave> getGrupoLlave(long idTorneo, FaseActual faseTorneo) {
         Torneo torneo = getById(idTorneo);
         List<GrupoLlave> grupos = grupoLlaveDao.findByTorneoAndFaseTorneoOrderByGrupoLlaveAscPuntosDescGolesFavorDesc(torneo, faseTorneo);
