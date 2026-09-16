@@ -2,6 +2,7 @@ package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoGrupoEquipo;
 import com.example.torneos.entities.Equipo;
+import com.example.torneos.entities.Jugador;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.services.EquipoService;
@@ -69,6 +70,10 @@ public class EquipoRest {
     @GetMapping("/torneo/{id}")
     public List<Equipo> getByTorneo(@PathVariable long id){
         return equipoService.getByTorneo(id);
+    }
+    @PostMapping("/torneo/{idTorneo}/jugador/{idEquipo}")
+    public Jugador registrarJugador(@PathVariable long idTorneo, @PathVariable long idEquipo, @RequestParam long usuarioId) {
+        return equipoService.registrarJugadorEnEquipo(idTorneo, idEquipo, usuarioId);
     }
     @GetMapping("/solicitudes/torneo/{id}")
     public List<Equipo> getSolicitudesByTorneo(@PathVariable long id){

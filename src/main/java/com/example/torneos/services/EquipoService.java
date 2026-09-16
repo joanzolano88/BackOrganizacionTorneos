@@ -5,10 +5,12 @@ import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.PersonaDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
+import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Persona;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
+import com.example.torneos.entities.Jugador;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.enums.EstadoTorneo;
@@ -31,6 +33,8 @@ public class EquipoService {
     private PersonaDao personaDao;
     @Autowired
     private UsuarioDao usuarioDao;
+    @Autowired
+    private JugadorDao jugadorDao;
 
     private boolean permiteGestionSolicitudes(Torneo torneo) {
         return torneo != null && torneo.getEstadoTorneo() != null &&
@@ -269,6 +273,37 @@ public class EquipoService {
             throw  new IllegalArgumentException("No hay equipos");
         }
         return listaEquipos;
+    }
+
+    public Jugador registrarJugadorEnEquipo(long idTorneo, long idEquipo, long idUsuario) {
+        Torneo torneo = torneoDao.findById(idTorneo)
+                .orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        Equipo equipo = equipoDao.findById(idEquipo)
+                .orElseThrow(() -> new IllegalArgumentException("El equipo no existe"));
+        Usuario usuario = usuarioDao.findById(idUsuario)
+                .orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (usuario.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR) {
+            throw new IllegalArgumentException("Solo los usuarios de tipo jugador pueden registrarse en un equipo");
+        }
+        if (equipo.getTorneo() == null || equipo.getTorneo().getId() != torneo.getId() || equipo.getFaseActual() == null) {
+            throw new IllegalArgumentException("El equipo no pertenece a este torneo o todavía no está aceptado");
+        }
+        if (usuario.getCedula() == null || usuario.getCedula().isBlank()) {
+            throw new IllegalArgumentException("Tu perfil debe tener una cédula registrada");
+        }
+        if (jugadorDao.findByCedula(usuario.getCedula()).isPresent()) {
+            throw new IllegalArgumentException("Ya estás registrado como jugador en un equipo");
+        }
+        Jugador jugador = new Jugador();
+        jugador.setCedula(usuario.getCedula());
+        jugador.setNombre(usuario.getNombre());
+        jugador.setNumeroCelular(usuario.getNumeroCelular());
+        jugador.setNumeroTelefono(usuario.getNumeroTelefono());
+        jugador.setCorreoElectronico(usuario.getCorreoElectronico());
+        jugador.setFoto(usuario.getFoto());
+        jugador.setEstadoJugador(com.example.torneos.enums.EstadoJugador.ACTIVO);
+        jugador.setEquipo(equipo);
+        return jugadorDao.save(jugador);
     }
     public List<Equipo> getByTorneoModalidad(Long id, ModalidadTorneo modalidadTorneo) {
         Torneo torneo = torneoDao.findById(id).orElse(null);

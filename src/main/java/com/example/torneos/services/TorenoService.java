@@ -79,6 +79,12 @@ public class TorenoService {
     public List<Torneo> getAll() {
         return torneoDao.findAll();
     }
+    @Transactional(readOnly = true)
+    public List<Torneo> getListado(String departamento, Long usuarioId) {
+        String filtroDepartamento = departamento == null || departamento.isBlank() || departamento.equalsIgnoreCase("Todos")
+                || departamento.equalsIgnoreCase("Seleccione un departamento") ? null : departamento.trim();
+        return torneoDao.buscarListado(filtroDepartamento, usuarioId);
+    }
     public List<DtoOptionTorneo> getOptionAll() {
         List<DtoOptionTorneo> torneoList = torneoDao.findAll().stream().map(t -> new DtoOptionTorneo(t.getNombre(), t.getId())).toList();
 

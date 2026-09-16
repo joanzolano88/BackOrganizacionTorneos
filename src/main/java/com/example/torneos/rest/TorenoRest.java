@@ -40,8 +40,9 @@ public class TorenoRest {
     }
 
     @GetMapping
-    public List<Torneo> getAll(){
-        return torenoService.getAll();
+    public List<Torneo> getAll(@RequestParam(required = false) String departamento,
+                               @RequestParam(required = false) Long usuarioId){
+        return torenoService.getListado(departamento, usuarioId);
     }
 
     @GetMapping("/option")
