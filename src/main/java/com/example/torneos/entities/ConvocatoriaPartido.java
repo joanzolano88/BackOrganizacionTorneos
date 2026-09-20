@@ -29,5 +29,8 @@ public class ConvocatoriaPartido {
     private Jugador jugador;
 
     private boolean titular;
+    private boolean fueTitular;
+    private boolean expulsado;
+    private int cambiosRealizados;
     private Integer numeroUniforme;
 }

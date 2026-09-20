@@ -9,15 +9,19 @@ import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.entities.ConvocatoriaPartido;
+import com.example.torneos.entities.EventoPartido;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Torneo;
+import com.example.torneos.entities.ParticipacionJugadorTorneo;
+import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.TipoUsuario;
 import com.example.torneos.enums.TipoEventoPartido;
+import com.example.torneos.enums.ModoCambioJugador;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +40,7 @@ public class ConvocatoriaPartidoService {
     @Autowired private UsuarioDao usuarioDao;
     @Autowired private TorneoDao torneoDao;
     @Autowired private EventoPartidoDao eventoDao;
+    @Autowired private ParticipacionJugadorTorneoDao participacionDao;
 
     public List<ConvocatoriaPartido> listar(long partidoId) {
         return convocatoriaDao.findByPartido(partido(partidoId));
@@ -79,6 +84,7 @@ public class ConvocatoriaPartidoService {
         convocatoria.setPartido(partido);
         convocatoria.setJugador(jugador);
         convocatoria.setTitular(titular);
+        convocatoria.setFueTitular(titular);
         return convocatoriaDao.save(convocatoria);
     }
 
@@ -110,12 +116,51 @@ public class ConvocatoriaPartidoService {
         Usuario usuario = usuario(usuarioId);
         validarGestor(convocatoria.getPartido(), usuario);
         validarEstadoEditable(convocatoria.getPartido());
+        if (convocatoria.getPartido().getEstadoPartido() == EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Durante el partido debes registrar una sustitución seleccionando quién sale y quién entra");
+        }
         if (titular && !convocatoria.isTitular()) {
             validarMaxTitulares(convocatoria.getPartido(), convocatoria.getJugador().getEquipo());
         }
         convocatoria.setTitular(titular);
+        if (titular) convocatoria.setFueTitular(true);
         registrarEvento(convocatoria.getPartido(), convocatoria.getJugador(), titular ? TipoEventoPartido.ENTRA_TITULAR : TipoEventoPartido.SALE_TITULAR);
         return convocatoriaDao.save(convocatoria);
+    }
+
+    @Transactional
+    public void sustituir(long partidoId, long titularId, long suplenteId, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        validarEstadoEditable(partido);
+        ConvocatoriaPartido sale = convocatoriaDao.findById(titularId)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador titular no existe en este partido"));
+        ConvocatoriaPartido entra = convocatoriaDao.findById(suplenteId)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador suplente no existe en este partido"));
+        if (sale.getPartido().getId() != partidoId || entra.getPartido().getId() != partidoId) throw new IllegalArgumentException("Los jugadores no pertenecen a este partido");
+        if (!sale.isTitular() || entra.isTitular()) throw new IllegalArgumentException("Selecciona un titular que sale y un suplente que entra");
+        if (sale.getJugador().getEquipo().getId() != entra.getJugador().getEquipo().getId()) throw new IllegalArgumentException("Los jugadores deben pertenecer al mismo equipo");
+        if (eventoDao.existsByPartidoAndJugadorAndTipo(partido, sale.getJugador(), TipoEventoPartido.TARJETA_ROJA) || sale.isExpulsado()) throw new IllegalArgumentException("Un jugador expulsado no puede salir por cambio");
+        if (eventoDao.existsByPartidoAndJugadorAndTipo(partido, entra.getJugador(), TipoEventoPartido.TARJETA_ROJA) || entra.isExpulsado()) throw new IllegalArgumentException("Un suplente expulsado no puede entrar");
+        ModoCambioJugador modo = partido.getTorneo().getModoCambioJugador() == null ? ModoCambioJugador.LIMITADOS : partido.getTorneo().getModoCambioJugador();
+        if (modo != ModoCambioJugador.SALIR_ENTRAR && entra.isFueTitular()) throw new IllegalArgumentException("Este suplente ya fue titular y no puede volver a entrar");
+        if (modo == ModoCambioJugador.LIMITADOS && partido.getTorneo().getMaximoCambios() > 0 && cambiosDelEquipo(partido, sale.getJugador().getEquipo()) >= partido.getTorneo().getMaximoCambios()) throw new IllegalArgumentException("Se alcanzó el límite de cambios del equipo");
+        sale.setTitular(false);
+        sale.setCambiosRealizados(sale.getCambiosRealizados() + 1);
+        entra.setTitular(true);
+        entra.setFueTitular(true);
+        entra.setCambiosRealizados(entra.getCambiosRealizados() + 1);
+        convocatoriaDao.save(sale);
+        convocatoriaDao.save(entra);
+        registrarEvento(partido, sale.getJugador(), TipoEventoPartido.SALE_TITULAR);
+        registrarEvento(partido, entra.getJugador(), TipoEventoPartido.ENTRA_TITULAR);
+    }
+
+    private long cambiosDelEquipo(Partido partido, Equipo equipo) {
+        return convocatoriaDao.findByPartido(partido).stream()
+                .filter(item -> item.getJugador().getEquipo() != null && item.getJugador().getEquipo().getId() == equipo.getId())
+                .mapToLong(ConvocatoriaPartido::getCambiosRealizados).sum() / 2;
     }
 
     @Transactional
@@ -145,7 +190,11 @@ public class ConvocatoriaPartidoService {
         Jugador jugador = jugadorDao.findById(jugadorId).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
         if (convocatoriaDao.findByPartidoAndJugador(partido, jugador).isEmpty()) throw new IllegalArgumentException("El jugador no está convocado en este partido");
         if (tipo != TipoEventoPartido.GOL && tipo != TipoEventoPartido.TARJETA_AMARILLA && tipo != TipoEventoPartido.TARJETA_ROJA) throw new IllegalArgumentException("El evento no es válido");
-        return guardarEvento(partido, jugador, tipo, minuto);
+        EventoPartido evento = guardarEvento(partido, jugador, tipo, minuto);
+        if (tipo == TipoEventoPartido.TARJETA_ROJA) {
+            convocatoriaDao.findByPartidoAndJugador(partido, jugador).ifPresent(convocatoria -> { convocatoria.setExpulsado(true); convocatoriaDao.save(convocatoria); });
+        }
+        return evento;
     }
 
     private void registrarEvento(Partido partido, Jugador jugador, TipoEventoPartido tipo) {
@@ -304,8 +353,9 @@ public class ConvocatoriaPartidoService {
     }
 
     private Equipo equipoDeJugadorEnPartido(Partido partido, Jugador jugador) {
-        if (jugador.getEquipo() != null && (jugador.getEquipo().getId() == partido.getEquipoLocal().getId() || jugador.getEquipo().getId() == partido.getEquipoVisitante().getId())) {
-            return jugador.getEquipo();
+        if (jugador.getEquipos() != null) {
+            if (jugador.getEquipos().stream().anyMatch(equipo -> equipo.getId() == partido.getEquipoLocal().getId())) return partido.getEquipoLocal();
+            if (jugador.getEquipos().stream().anyMatch(equipo -> equipo.getId() == partido.getEquipoVisitante().getId())) return partido.getEquipoVisitante();
         }
         throw new IllegalArgumentException("El jugador no pertenece a uno de los equipos del partido");
     }

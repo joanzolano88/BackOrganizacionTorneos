@@ -16,6 +16,8 @@ import com.example.torneos.enums.ModalidadFase;
 import com.example.torneos.enums.ModalidadTorneo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.entities.ParticipacionJugadorTorneo;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -31,6 +33,8 @@ import java.util.stream.Collectors;
 public class PartidoService {
     @Autowired
     private PartidoDao partidoDao;
+    @Autowired
+    private ParticipacionJugadorTorneoDao participacionDao;
     @Autowired
     private EquipoDao equipoDao;
     @Autowired
@@ -396,6 +400,7 @@ public class PartidoService {
             throw new IllegalArgumentException("Solo se puede terminar un partido en proceso");
         }
         partido.setEstadoPartido(EstadoPartido.TERMINADO);
+        marcarParticipantes(partido);
         if (partido.getFaseEncuentro().equals(FaseActual.FASE_GRUPOS)) {
             partido.getEquipoLocal().setAnotacionesAFavor(partido.getEquipoLocal().getAnotacionesAFavor() + partido.getAnotacionesEquipoLocal());
             partido.getEquipoLocal().setAnotacionesEnContra(partido.getEquipoLocal().getAnotacionesEnContra() + partido.getAnotacionesEquipoVisitante());
@@ -427,6 +432,7 @@ public class PartidoService {
             throw new IllegalArgumentException("El ganador de los penaltis no es válido");
         }
         partido.setEstadoPartido(EstadoPartido.TERMINADO);
+        marcarParticipantes(partido);
         if (gandor.equals("L") ) {
             partido.setPenaltisEquipoLocal(1);
             partido.setPenaltisEquipoVisitante(0);
@@ -435,6 +441,22 @@ public class PartidoService {
             partido.setPenaltisEquipoVisitante(1);
         }
         return partidoDao.save(partido);
+    }
+
+    private void marcarParticipantes(Partido partido) {
+        if (partido.getConvocatorias() == null) return;
+        partido.getConvocatorias().forEach(convocatoria -> {
+            ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(partido.getTorneo(), convocatoria.getJugador()).orElse(null);
+            if (participacion == null) {
+                participacion = new ParticipacionJugadorTorneo();
+                participacion.setTorneo(partido.getTorneo());
+                participacion.setJugador(convocatoria.getJugador());
+            }
+            participacion.setEquipo(convocatoria.getJugador().getEquipo());
+            participacion.setParticipando(true);
+            participacion.setJugoPartido(true);
+            participacionDao.save(participacion);
+        });
     }
     public Partido cancelarPartido(long id) {
         Partido partido = partidoDao.findById(id).get();

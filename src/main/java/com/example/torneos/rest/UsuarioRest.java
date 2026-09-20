@@ -4,6 +4,14 @@ import com.example.torneos.DTO.DtoLoginInfo;
 import com.example.torneos.DTO.DtoUsuarioInfo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.services.UsuarioService;
+import com.example.torneos.dao.EquipoDao;
+import com.example.torneos.dao.TorneoDao;
+import com.example.torneos.dao.JugadorDao;
+import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.entities.Equipo;
+import com.example.torneos.entities.Persona;
+import java.util.HashMap;
+import java.util.Map;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +30,10 @@ import java.util.List;
 public class UsuarioRest {
     @Autowired
     private UsuarioService usuarioService;
+    @Autowired private EquipoDao equipoDao;
+    @Autowired private TorneoDao torneoDao;
+    @Autowired private JugadorDao jugadorDao;
+    @Autowired private ParticipacionJugadorTorneoDao participacionDao;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -52,6 +64,24 @@ public class UsuarioRest {
     @GetMapping("/{id}")
     public Usuario getById(@PathVariable long id){
         return usuarioService.getById(id);
+    }
+
+    @GetMapping("/{id}/perfil")
+    public Map<String, Object> perfil(@PathVariable long id) {
+        Usuario usuario = usuarioService.getById(id);
+        Map<String, Object> respuesta = new HashMap<>();
+        respuesta.put("usuario", usuario);
+        respuesta.put("torneosCreados", torneoDao.findByEncargadoTorneo(usuario));
+        Persona delegado = usuario.getNumeroCelular() == null ? null : usuarioService.buscarPersonaPorCelular(usuario.getNumeroCelular());
+        respuesta.put("equiposDelegado", delegado == null ? List.of() : equipoDao.findByDelegado(delegado));
+        if (usuario.getCedula() != null) {
+            jugadorDao.findByCedula(usuario.getCedula()).ifPresent(jugador -> {
+                respuesta.put("jugador", jugador);
+                respuesta.put("equiposJugador", jugador.getEquipos());
+                respuesta.put("participaciones", participacionDao.findAll().stream().filter(item -> item.getJugador().getId() == jugador.getId()).toList());
+            });
+        }
+        return respuesta;
     }
 
     @PutMapping()

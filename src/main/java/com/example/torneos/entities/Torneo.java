@@ -4,6 +4,7 @@ import com.example.torneos.enums.EstadoTorneo;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadFase;
 import com.example.torneos.enums.ModalidadTorneo;
+import com.example.torneos.enums.ModoCambioJugador;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -30,6 +31,8 @@ public class Torneo {
     private FaseActual faseInicioEliminatorias;
     private ModalidadFase modalidadEliminatorias;
     private ModalidadFase modalidadEliminatoriasGrupos;
+    private ModoCambioJugador modoCambioJugador;
+    private int maximoCambios;
     @JoinColumn
     @ManyToOne
     private Usuario encargadoTorneo;

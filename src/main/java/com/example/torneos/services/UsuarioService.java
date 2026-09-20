@@ -2,6 +2,8 @@ package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoUsuarioInfo;
 import com.example.torneos.dao.UsuarioDao;
+import com.example.torneos.dao.PersonaDao;
+import com.example.torneos.entities.Persona;
 import com.example.torneos.DTO.DtoLoginInfo;
 import com.example.torneos.entities.Usuario;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,8 @@ import java.util.Optional;
 public class UsuarioService {
     @Autowired
     private UsuarioDao usuarioDao;
+    @Autowired
+    private PersonaDao personaDao;
     public Usuario save(Usuario usuario) {
         return usuarioDao.save(usuario);
     }
@@ -40,6 +44,13 @@ public class UsuarioService {
             throw  new IllegalArgumentException("No existen Usuario con el id:" + id);
         }
         return usuario;
+    }
+
+    public Persona buscarPersonaPorCelular(String celular) {
+        return personaDao.findAll().stream()
+                .filter(persona -> celular.equals(persona.getNumeroCelular()))
+                .findFirst()
+                .orElse(null);
     }
     public Usuario update(Usuario usuario) {
         Optional<Usuario> optUsuario = usuarioDao.findById(usuario.getId());

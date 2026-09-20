@@ -49,6 +49,11 @@ public class ConvocatoriaPartidoRest {
         return service.cambiarTitular(convocatoriaId, titular, usuarioId);
     }
 
+    @PostMapping("/{partidoId}/sustituciones")
+    public void sustituir(@PathVariable long partidoId, @RequestParam long titularId, @RequestParam long suplenteId, @RequestParam long usuarioId) {
+        service.sustituir(partidoId, titularId, suplenteId, usuarioId);
+    }
+
     @PutMapping("/convocados/{convocatoriaId}/numero")
     public ConvocatoriaPartido numero(@PathVariable long convocatoriaId, @RequestParam int numero, @RequestParam long usuarioId) {
         return service.cambiarNumeroUniforme(convocatoriaId, numero, usuarioId);

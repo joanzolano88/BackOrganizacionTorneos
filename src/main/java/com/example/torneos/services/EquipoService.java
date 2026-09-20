@@ -11,6 +11,10 @@ import com.example.torneos.entities.Persona;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.entities.Jugador;
+import com.example.torneos.entities.SolicitudJugadorEquipo;
+import com.example.torneos.entities.ParticipacionJugadorTorneo;
+import com.example.torneos.dao.SolicitudJugadorEquipoDao;
+import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.enums.EstadoTorneo;
@@ -35,6 +39,10 @@ public class EquipoService {
     private UsuarioDao usuarioDao;
     @Autowired
     private JugadorDao jugadorDao;
+    @Autowired
+    private SolicitudJugadorEquipoDao solicitudJugadorDao;
+    @Autowired
+    private ParticipacionJugadorTorneoDao participacionDao;
 
     private boolean permiteGestionSolicitudes(Torneo torneo) {
         return torneo != null && torneo.getEstadoTorneo() != null &&
@@ -261,6 +269,13 @@ public class EquipoService {
         if (equipo == null) {
             throw  new IllegalArgumentException("El Equipo no existe");
         }
+        List<Jugador> jugadores = jugadorDao.findByEquiposContaining(equipo);
+        equipo.setListaJugadoresActivos(jugadores.stream()
+            .filter(jugador -> jugador.getEstadoJugador() == null || jugador.getEstadoJugador().name().equals("ACTIVO"))
+            .toList());
+        equipo.setListaJugadoresInactivos(jugadores.stream()
+            .filter(jugador -> jugador.getEstadoJugador() != null && !jugador.getEstadoJugador().name().equals("ACTIVO"))
+            .toList());
         return equipo;
     }
     public List<Equipo> getByTorneo(Long id) {
@@ -291,19 +306,125 @@ public class EquipoService {
         if (usuario.getCedula() == null || usuario.getCedula().isBlank()) {
             throw new IllegalArgumentException("Tu perfil debe tener una cédula registrada");
         }
-        if (jugadorDao.findByCedula(usuario.getCedula()).isPresent()) {
-            throw new IllegalArgumentException("Ya estás registrado como jugador en un equipo");
+        Jugador jugador = jugadorPorUsuario(usuario);
+        ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(torneo, jugador).orElse(null);
+        if (participacion != null && participacion.isParticipando() && participacion.getEquipo().getId() != equipo.getId()) {
+            throw new IllegalArgumentException("El jugador ya participa en este torneo con otro equipo");
         }
-        Jugador jugador = new Jugador();
-        jugador.setCedula(usuario.getCedula());
-        jugador.setNombre(usuario.getNombre());
-        jugador.setNumeroCelular(usuario.getNumeroCelular());
-        jugador.setNumeroTelefono(usuario.getNumeroTelefono());
-        jugador.setCorreoElectronico(usuario.getCorreoElectronico());
-        jugador.setFoto(usuario.getFoto());
-        jugador.setEstadoJugador(com.example.torneos.enums.EstadoJugador.ACTIVO);
+        jugador.getEquipos().add(equipo);
         jugador.setEquipo(equipo);
+        if (participacion == null) {
+            participacion = new ParticipacionJugadorTorneo();
+            participacion.setTorneo(torneo);
+            participacion.setJugador(jugador);
+        }
+        participacion.setEquipo(equipo);
+        participacion.setParticipando(false);
+        participacionDao.save(participacion);
         return jugadorDao.save(jugador);
+    }
+
+    public SolicitudJugadorEquipo solicitarJugador(long idEquipo, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (usuario.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR) throw new IllegalArgumentException("Solo un jugador puede enviar solicitudes");
+        if (usuario.getCedula() == null || usuario.getCedula().isBlank()) throw new IllegalArgumentException("Tu perfil debe tener una cédula registrada");
+        Jugador jugador = jugadorPorUsuario(usuario);
+        if (jugador.getEquipos().contains(equipo)) throw new IllegalArgumentException("Ya perteneces a este equipo");
+        if (solicitudJugadorDao.findByEquipoAndJugadorAndEstado(equipo, jugador, "PENDIENTE").isPresent()) throw new IllegalArgumentException("Ya tienes una solicitud pendiente");
+        SolicitudJugadorEquipo solicitud = new SolicitudJugadorEquipo();
+        solicitud.setEquipo(equipo);
+        solicitud.setJugador(jugador);
+        return solicitudJugadorDao.save(solicitud);
+    }
+
+    public List<SolicitudJugadorEquipo> solicitudesJugador(long idEquipo, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        return solicitudJugadorDao.findByEquipoAndEstado(equipo, "PENDIENTE");
+    }
+
+    public Equipo aceptarSolicitudJugador(long idSolicitud, long idUsuario) {
+        SolicitudJugadorEquipo solicitud = solicitudJugadorDao.findById(idSolicitud).orElseThrow(() -> new IllegalArgumentException("La solicitud no existe"));
+        validarDelegado(solicitud.getEquipo(), idUsuario);
+        Jugador jugador = solicitud.getJugador();
+        jugador.getEquipos().add(solicitud.getEquipo());
+        if (jugador.getEquipo() == null) jugador.setEquipo(solicitud.getEquipo());
+        jugadorDao.save(jugador);
+        solicitud.setEstado("ACEPTADA");
+        solicitudJugadorDao.save(solicitud);
+        return getById(solicitud.getEquipo().getId());
+    }
+
+    public void rechazarSolicitudJugador(long idSolicitud, long idUsuario) {
+        SolicitudJugadorEquipo solicitud = solicitudJugadorDao.findById(idSolicitud).orElseThrow(() -> new IllegalArgumentException("La solicitud no existe"));
+        validarDelegado(solicitud.getEquipo(), idUsuario);
+        solicitud.setEstado("RECHAZADA");
+        solicitudJugadorDao.save(solicitud);
+    }
+
+    public Equipo agregarJugadorPorCedula(long idEquipo, String cedula, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        Jugador jugador = jugadorDao.findByCedula(cedula.trim()).orElseThrow(() -> new IllegalArgumentException("No se encontró un jugador con esa cédula"));
+        jugador.getEquipos().add(equipo);
+        if (jugador.getEquipo() == null) jugador.setEquipo(equipo);
+        jugadorDao.save(jugador);
+        return getById(idEquipo);
+    }
+
+    public void eliminarJugador(long idEquipo, long idJugador, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        Jugador jugador = jugadorDao.findById(idJugador).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        jugador.getEquipos().remove(equipo);
+        if (jugador.getEquipo() != null && jugador.getEquipo().getId() == idEquipo) jugador.setEquipo(jugador.getEquipos().stream().findFirst().orElse(null));
+        jugadorDao.save(jugador);
+    }
+
+    private Jugador jugadorPorUsuario(Usuario usuario) {
+        return jugadorDao.findByCedula(usuario.getCedula()).orElseGet(() -> {
+            Jugador jugador = new Jugador();
+            jugador.setCedula(usuario.getCedula());
+            jugador.setNombre(usuario.getNombre());
+            jugador.setNumeroCelular(usuario.getNumeroCelular());
+            jugador.setNumeroTelefono(usuario.getNumeroTelefono());
+            jugador.setCorreoElectronico(usuario.getCorreoElectronico());
+            jugador.setFoto(usuario.getFoto());
+            jugador.setEstadoJugador(com.example.torneos.enums.EstadoJugador.ACTIVO);
+            return jugadorDao.save(jugador);
+        });
+    }
+
+    private void validarDelegado(Equipo equipo, long idUsuario) {
+        Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (usuario.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.DELEGADO || equipo.getDelegado() == null || usuario.getNumeroCelular() == null || !usuario.getNumeroCelular().equals(equipo.getDelegado().getNumeroCelular())) throw new IllegalArgumentException("Solo el delegado puede gestionar los jugadores");
+    }
+
+    public ParticipacionJugadorTorneo cambiarEquipoJugador(long idTorneo, long idJugador, long idEquipoNuevo, long idUsuario) {
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        Usuario organizador = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (organizador.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.ORGANIZADOR || torneo.getEncargadoTorneo() == null || torneo.getEncargadoTorneo().getId() != organizador.getId()) throw new IllegalArgumentException("Solo el organizador puede cambiar el equipo del jugador");
+        Jugador jugador = jugadorDao.findById(idJugador).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        Equipo equipoNuevo = equipo(idEquipoNuevo);
+        ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(torneo, jugador).orElseThrow(() -> new IllegalArgumentException("El jugador aún no está registrado en este torneo"));
+        if (participacion.isCambioEquipo()) throw new IllegalArgumentException("El jugador ya realizó su único cambio de equipo en este torneo");
+        participacion.setEquipoAnterior(participacion.getEquipo());
+        participacion.setEquipo(equipoNuevo);
+        participacion.setCambioEquipo(true);
+        jugador.getEquipos().add(equipoNuevo);
+        jugador.setEquipo(equipoNuevo);
+        jugadorDao.save(jugador);
+        return participacionDao.save(participacion);
+    }
+
+    public List<ParticipacionJugadorTorneo> participacionesTorneo(long idTorneo) {
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        return participacionDao.findByTorneo(torneo);
+    }
+
+    private Equipo equipo(long id) {
+        return equipoDao.findById(id).orElseThrow(() -> new IllegalArgumentException("El equipo no existe"));
     }
     public List<Equipo> getByTorneoModalidad(Long id, ModalidadTorneo modalidadTorneo) {
         Torneo torneo = torneoDao.findById(id).orElse(null);
