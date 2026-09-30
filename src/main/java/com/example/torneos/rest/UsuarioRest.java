@@ -35,6 +35,8 @@ import java.util.List;
 public class UsuarioRest {
     @Autowired
     private UsuarioService usuarioService;
+    @Autowired
+    private ObjectMapper objectMapper;
     @Autowired private EquipoDao equipoDao;
     @Autowired private TorneoDao torneoDao;
     @Autowired private JugadorDao jugadorDao;
@@ -46,8 +48,7 @@ public class UsuarioRest {
     public Usuario save(@RequestBody @RequestParam("objeto") String usuarioS,
                         @Nullable @RequestBody @RequestParam("foto") MultipartFile fileF,
                         @Nullable @RequestBody @RequestParam("identificacion") MultipartFile fileI) throws JsonMappingException, JsonProcessingException, IOException {
-        ObjectMapper mapper = new ObjectMapper();
-        Usuario usuario = mapper.readValue(usuarioS, Usuario.class);
+        Usuario usuario = objectMapper.readValue(usuarioS, Usuario.class);
         if (fileF != null) {
             usuario.setFoto(fileF.getBytes());
         }
