@@ -41,6 +41,7 @@ public class ConvocatoriaPartidoService {
     @Autowired private TorneoDao torneoDao;
     @Autowired private EventoPartidoDao eventoDao;
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
+    @Autowired private SancionJugadorTorneoService sancionService;
 
     public List<ConvocatoriaPartido> listar(long partidoId) {
         return convocatoriaDao.findByPartido(partido(partidoId));
@@ -68,6 +69,7 @@ public class ConvocatoriaPartidoService {
         validarEstadoEditable(partido);
         Jugador jugador = jugadorDao.findById(jugadorId)
                 .orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        sancionService.validarElegibilidad(partido, jugador);
         Equipo equipo = equipoDeJugadorEnPartido(partido, jugador);
         validarEquipoDelDelegado(partido, equipo, usuario);
         if (convocatoriaDao.findByPartidoAndJugador(partido, jugador).isPresent()) {
@@ -191,6 +193,7 @@ public class ConvocatoriaPartidoService {
         if (convocatoriaDao.findByPartidoAndJugador(partido, jugador).isEmpty()) throw new IllegalArgumentException("El jugador no está convocado en este partido");
         if (tipo != TipoEventoPartido.GOL && tipo != TipoEventoPartido.TARJETA_AMARILLA && tipo != TipoEventoPartido.TARJETA_ROJA) throw new IllegalArgumentException("El evento no es válido");
         EventoPartido evento = guardarEvento(partido, jugador, tipo, minuto);
+        sancionService.registrarTarjeta(evento);
         if (tipo == TipoEventoPartido.TARJETA_ROJA) {
             convocatoriaDao.findByPartidoAndJugador(partido, jugador).ifPresent(convocatoria -> { convocatoria.setExpulsado(true); convocatoriaDao.save(convocatoria); });
         }
@@ -269,14 +272,23 @@ public class ConvocatoriaPartidoService {
             nuevo.setNumeroCelular(usuario.getNumeroCelular());
             nuevo.setCorreoElectronico(usuario.getCorreoElectronico());
             nuevo.setEquipo(invitacion.getEquipo());
+            nuevo.getEquipos().add(invitacion.getEquipo());
             return jugadorDao.save(nuevo);
         });
-        if (jugador.getEquipo() != invitacion.getEquipo()) {
-            throw new IllegalArgumentException("El jugador no pertenece al equipo invitado");
+        if (jugador.getEquipo() == null || jugador.getEquipo().getId() != invitacion.getEquipo().getId()) {
+            if (jugador.getEquipos() == null || jugador.getEquipos().stream().noneMatch(item -> item.getId() == invitacion.getEquipo().getId())) {
+                throw new IllegalArgumentException("El jugador no pertenece al equipo invitado");
+            }
+        }
+        Partido partido = invitacion.getPartido();
+        validarEstadoEditable(partido);
+        sancionService.validarElegibilidad(partido, jugador);
+        if (convocatoriaDao.countByPartidoAndJugadorEquipo(partido, invitacion.getEquipo()) >= maximoConvocados(partido)) {
+            throw new IllegalArgumentException("Se alcanzó el máximo de jugadores convocados para " + invitacion.getEquipo().getNombre());
         }
         invitacion.setUsada(true);
         invitacionDao.save(invitacion);
-        return agregarInterno(invitacion.getPartido(), jugador, false);
+        return agregarInterno(partido, jugador, false);
     }
 
     private ConvocatoriaPartido agregarInterno(Partido partido, Jugador jugador, boolean titular) {

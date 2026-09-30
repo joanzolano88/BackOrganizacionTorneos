@@ -5,6 +5,7 @@ import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.SolicitudJugadorEquipo;
 import com.example.torneos.entities.ParticipacionJugadorTorneo;
+import com.example.torneos.entities.ParticipacionEquipoTorneo;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.services.EquipoService;
@@ -69,6 +70,10 @@ public class EquipoRest {
     public Equipo getById(@PathVariable long id){
         return equipoService.getById(id);
     }
+    @GetMapping("/{idEquipo}/torneo/{idTorneo}")
+    public Equipo getByIdAndTorneo(@PathVariable long idEquipo, @PathVariable long idTorneo) {
+        return equipoService.getByIdAndTorneo(idEquipo, idTorneo);
+    }
     @GetMapping("/torneo/{id}")
     public List<Equipo> getByTorneo(@PathVariable long id){
         return equipoService.getByTorneo(id);
@@ -76,6 +81,16 @@ public class EquipoRest {
     @PostMapping("/torneo/{idTorneo}/jugador/{idEquipo}")
     public Jugador registrarJugador(@PathVariable long idTorneo, @PathVariable long idEquipo, @RequestParam long usuarioId) {
         return equipoService.registrarJugadorEnEquipo(idTorneo, idEquipo, usuarioId);
+    }
+    @PostMapping("/{idEquipo}/torneo/{idTorneo}/jugadores/{idJugador}")
+    public ParticipacionJugadorTorneo agregarJugadorATorneo(@PathVariable long idEquipo, @PathVariable long idTorneo,
+                                                              @PathVariable long idJugador, @RequestParam long usuarioId) {
+        return equipoService.agregarJugadorATorneo(idEquipo, idTorneo, idJugador, usuarioId);
+    }
+    @DeleteMapping("/{idEquipo}/torneo/{idTorneo}/jugadores/{idJugador}")
+    public void eliminarJugadorDeTorneo(@PathVariable long idEquipo, @PathVariable long idTorneo,
+                                       @PathVariable long idJugador, @RequestParam long usuarioId) {
+        equipoService.eliminarJugadorDeTorneo(idEquipo, idTorneo, idJugador, usuarioId);
     }
     @PostMapping("/{idEquipo}/solicitud-jugador")
     public SolicitudJugadorEquipo solicitarJugador(@PathVariable long idEquipo, @RequestParam long usuarioId) {
@@ -93,9 +108,25 @@ public class EquipoRest {
     public void rechazarSolicitudJugador(@PathVariable long id, @RequestParam long usuarioId) {
         equipoService.rechazarSolicitudJugador(id, usuarioId);
     }
-    @PostMapping("/{idEquipo}/jugadores")
-    public Equipo agregarJugador(@PathVariable long idEquipo, @RequestParam String cedula, @RequestParam long usuarioId) {
-        return equipoService.agregarJugadorPorCedula(idEquipo, cedula, usuarioId);
+    @PostMapping("/{idEquipo}/invitaciones-jugador")
+    public com.example.torneos.DTO.DtoInvitacionEquipo invitarJugador(@PathVariable long idEquipo, @RequestParam String cedula, @RequestParam long usuarioId) {
+        return equipoService.invitarJugador(idEquipo, cedula, usuarioId);
+    }
+    @GetMapping("/invitaciones-jugador")
+    public List<com.example.torneos.DTO.DtoInvitacionEquipo> invitacionesJugador(@RequestParam long usuarioId) {
+        return equipoService.invitacionesJugador(usuarioId);
+    }
+    @PutMapping("/invitaciones-jugador/{id}/aceptar")
+    public com.example.torneos.DTO.DtoInvitacionEquipo aceptarInvitacionJugador(@PathVariable long id, @RequestParam long usuarioId) {
+        return equipoService.resolverInvitacionJugador(id, usuarioId, true);
+    }
+    @PutMapping("/invitaciones-jugador/{id}/rechazar")
+    public com.example.torneos.DTO.DtoInvitacionEquipo rechazarInvitacionJugador(@PathVariable long id, @RequestParam long usuarioId) {
+        return equipoService.resolverInvitacionJugador(id, usuarioId, false);
+    }
+    @GetMapping("/{idEquipo}/jugadores/buscar")
+    public Jugador buscarJugador(@PathVariable long idEquipo, @RequestParam String cedula, @RequestParam long usuarioId) {
+        return equipoService.buscarJugadorPorCedula(idEquipo, cedula, usuarioId);
     }
     @DeleteMapping("/{idEquipo}/jugadores/{idJugador}")
     public void eliminarJugador(@PathVariable long idEquipo, @PathVariable long idJugador, @RequestParam long usuarioId) {
@@ -108,6 +139,14 @@ public class EquipoRest {
     @GetMapping("/torneo/{idTorneo}/participaciones")
     public List<ParticipacionJugadorTorneo> participaciones(@PathVariable long idTorneo) {
         return equipoService.participacionesTorneo(idTorneo);
+    }
+    @GetMapping("/{idEquipo}/participaciones")
+    public List<ParticipacionJugadorTorneo> participacionesEquipo(@PathVariable long idEquipo) {
+        return equipoService.getParticipacionesEquipo(idEquipo);
+    }
+    @GetMapping("/{idEquipo}/torneos")
+    public List<ParticipacionEquipoTorneo> torneosEquipo(@PathVariable long idEquipo) {
+        return equipoService.participacionesTorneosEquipo(idEquipo);
     }
     @GetMapping("/solicitudes/torneo/{id}")
     public List<Equipo> getSolicitudesByTorneo(@PathVariable long id){

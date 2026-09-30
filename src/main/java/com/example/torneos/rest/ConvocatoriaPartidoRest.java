@@ -16,6 +16,7 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class ConvocatoriaPartidoRest {
     @Autowired private ConvocatoriaPartidoService service;
+    @Autowired private com.example.torneos.services.SancionJugadorTorneoService sancionService;
 
     @GetMapping("/{partidoId}/convocados")
     public List<ConvocatoriaPartido> listar(@PathVariable long partidoId) { return service.listar(partidoId); }
@@ -72,4 +73,19 @@ public class ConvocatoriaPartidoRest {
 
     @PostMapping("/invitacion/{token}/aceptar")
     public ConvocatoriaPartido aceptar(@PathVariable String token, @RequestParam long usuarioId) { return service.aceptarInvitacion(token, usuarioId); }
+
+    @GetMapping("/torneo/{torneoId}/sanciones")
+    public List<com.example.torneos.entities.SancionJugadorTorneo> sanciones(@PathVariable long torneoId) {
+        return sancionService.listarTorneo(torneoId);
+    }
+
+    @PutMapping("/{partidoId}/sanciones/{jugadorId}/levantar")
+    public com.example.torneos.entities.SancionJugadorTorneo levantarSancion(@PathVariable long partidoId, @PathVariable long jugadorId, @RequestParam long usuarioId) {
+        return sancionService.modificarEnPartido(partidoId, jugadorId, usuarioId, true);
+    }
+
+    @PutMapping("/{partidoId}/sanciones/{jugadorId}/restaurar")
+    public com.example.torneos.entities.SancionJugadorTorneo restaurarSancion(@PathVariable long partidoId, @PathVariable long jugadorId, @RequestParam long usuarioId) {
+        return sancionService.modificarEnPartido(partidoId, jugadorId, usuarioId, false);
+    }
 }

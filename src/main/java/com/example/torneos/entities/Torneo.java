@@ -33,6 +33,9 @@ public class Torneo {
     private ModalidadFase modalidadEliminatoriasGrupos;
     private ModoCambioJugador modoCambioJugador;
     private int maximoCambios;
+    private int amarillasParaSuspension;
+    private int partidosSuspensionRoja;
+    private boolean expulsionPermanenteTorneo;
     @JoinColumn
     @ManyToOne
     private Usuario encargadoTorneo;

@@ -50,6 +50,11 @@ public class TorenoRest {
         return torenoService.getOptionAll();
     }
 
+    @GetMapping("/ciudad/{ciudadId}")
+    public List<DtoOptionTorneo> getOptionByCiudad(@PathVariable long ciudadId) {
+        return torenoService.getOptionByCiudad(ciudadId);
+    }
+
     @GetMapping("/{id}")
     public Torneo getById(@PathVariable long id){
         return torenoService.getById(id);

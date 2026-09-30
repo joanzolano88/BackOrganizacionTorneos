@@ -1,6 +1,7 @@
 package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoResulatoLlave;
+import com.example.torneos.DTO.DtoPartidoResumen;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.enums.EstadoPartido;
@@ -34,7 +35,7 @@ public class PartidoRest {
         return partidoService.getTorneoFaseActual(idTorneo, faseActual);
     }
     @GetMapping("torneo/fase/{idTorneo}/{faseActual}")
-    public List<List<Partido>> getTorneoFaseFiltrada(
+    public List<List<DtoPartidoResumen>> getTorneoFaseFiltrada(
             @PathVariable long idTorneo,
             @PathVariable FaseActual faseActual,
             @RequestParam(defaultValue = "PENDIENTE") String estado,
@@ -55,7 +56,7 @@ public class PartidoRest {
         return partidoService.getByTorneoModalidad(id, modalidadTorneo);
     }
     @GetMapping("programado_proceso/{fecha}/{idTorneo}")
-    public List<Partido> getPartidosFechaTorneo(@PathVariable long fecha, @PathVariable long idTorneo){
+    public List<DtoPartidoResumen> getPartidosFechaTorneo(@PathVariable long fecha, @PathVariable long idTorneo){
         return partidoService.getPartidosFechaTorneo(fecha, idTorneo);
     }
     @GetMapping("generar_partidos/{idTorneo}")

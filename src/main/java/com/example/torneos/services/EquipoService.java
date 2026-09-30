@@ -15,11 +15,19 @@ import com.example.torneos.entities.SolicitudJugadorEquipo;
 import com.example.torneos.entities.ParticipacionJugadorTorneo;
 import com.example.torneos.dao.SolicitudJugadorEquipoDao;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.dao.ParticipacionEquipoTorneoDao;
+import com.example.torneos.dao.NotificacionUsuarioDao;
+import com.example.torneos.entities.ParticipacionEquipoTorneo;
+import com.example.torneos.entities.NotificacionUsuario;
+import com.example.torneos.entities.InvitacionEquipo;
+import com.example.torneos.dao.InvitacionEquipoDao;
+import com.example.torneos.DTO.DtoInvitacionEquipo;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.enums.EstadoTorneo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +51,12 @@ public class EquipoService {
     private SolicitudJugadorEquipoDao solicitudJugadorDao;
     @Autowired
     private ParticipacionJugadorTorneoDao participacionDao;
+    @Autowired
+    private ParticipacionEquipoTorneoDao participacionEquipoDao;
+    @Autowired
+    private NotificacionUsuarioDao notificacionDao;
+    @Autowired
+    private InvitacionEquipoDao invitacionEquipoDao;
 
     private boolean permiteGestionSolicitudes(Torneo torneo) {
         return torneo != null && torneo.getEstadoTorneo() != null &&
@@ -99,8 +113,8 @@ public class EquipoService {
     }
 
     public Equipo save(Equipo equipo) {
-        if (equipo == null || equipo.getTorneo() == null) {
-            throw new IllegalArgumentException("Torneo nulo");
+        if (equipo == null) {
+            throw new IllegalArgumentException("El equipo es obligatorio");
         }
         if (equipo.getDelegado() == null) {
             throw new IllegalArgumentException("El delegado es obligatorio");
@@ -119,20 +133,15 @@ public class EquipoService {
         if (equipo.getNombre() == null || equipo.getNombre().isBlank()) {
             throw new IllegalArgumentException("El nombre del equipo es obligatorio");
         }
-        List<Equipo> listaEquiposDelegado = equipoDao.findByDelegado(equipo.getDelegado());
-        int cantEquipos = equipoDao.countByTorneoAndGrupoAndFaseActual(equipo.getTorneo(), equipo.getGrupo(), equipo.getTorneo().getFaseTorneo());
-        if (equipo.getTorneo().getCantidadEquipos() == cantEquipos) {
-            throw new IllegalArgumentException("EL grupo esta completo");
-        }
-        for (Equipo equipoDelegado : listaEquiposDelegado) {
-            if (equipoDelegado != null && equipoDelegado.getTorneo() != null && equipoDelegado.getTorneo().equals(equipo.getTorneo()) && equipoDelegado.getFaseActual() != null) {
-                throw new IllegalArgumentException("El delegado ya pertenece a un equipo");
-            }
-        }
-        equipo.setFaseActual(equipo.getTorneo().getFaseTorneo());
+
+        equipo.setTorneo(null);
+        equipo.setFaseActual(null);
+        equipo.setGrupo(0);
+        equipo.setParticipacionTorneo(null);
         return equipoDao.save(equipo);
     }
 
+    @Transactional
     public Equipo saveSolicitud(Equipo equipo) {
         if (equipo == null || equipo.getTorneo() == null) {
             throw new IllegalArgumentException("Torneo nulo");
@@ -140,49 +149,73 @@ public class EquipoService {
         if (equipo.getDelegado() == null) {
             throw new IllegalArgumentException("El delegado es obligatorio");
         }
-        equipo.setDelegado(resolverDelegado(equipo.getDelegado()));
-        if (equipo.getNombre() == null || equipo.getNombre().isBlank()) {
+        Torneo torneo = torneoDao.findById(equipo.getTorneo().getId())
+                .orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        Persona delegadoSolicitante = resolverDelegado(equipo.getDelegado());
+        Equipo equipoBase;
+        if (equipo.getId() > 0) {
+            equipoBase = equipoDao.findById(equipo.getId())
+                    .orElseThrow(() -> new IllegalArgumentException("El equipo seleccionado no existe"));
+            if (equipoBase.getDelegado() == null || delegadoSolicitante.getNumeroCelular() == null ||
+                    !delegadoSolicitante.getNumeroCelular().equals(equipoBase.getDelegado().getNumeroCelular())) {
+                throw new IllegalArgumentException("Solo el delegado del equipo puede solicitar su participación");
+            }
+        } else {
+            equipo.setTorneo(null);
+            equipo.setDelegado(delegadoSolicitante);
+            equipoBase = equipo;
+        }
+        if (equipoBase.getNombre() == null || equipoBase.getNombre().isBlank()) {
             throw new IllegalArgumentException("El nombre del equipo es obligatorio");
         }
-
-        Optional<Equipo> solicitudPendiente = equipoDao.findByDelegadoAndTorneoAndFaseActualIsNull(equipo.getDelegado(), equipo.getTorneo());
-        List<Equipo> equiposDelDelegado = equipoDao.findByDelegadoAndTorneo(equipo.getDelegado(), equipo.getTorneo());
-        if ((solicitudPendiente != null && solicitudPendiente.isPresent()) || !equiposDelDelegado.isEmpty()) {
-            throw new IllegalArgumentException("El delegado ya tiene una solicitud o un equipo en este torneo");
+        if (participacionEquipoDao.findByEquipoAndTorneo(equipoBase, torneo).isPresent()) {
+            throw new IllegalArgumentException("Este equipo ya tiene una solicitud o participa en este torneo");
         }
-        boolean equipoRepetido = equipoDao.findByTorneo(equipo.getTorneo()).stream()
-                .anyMatch(equipoRegistrado -> equipoRegistrado.getNombre() != null &&
-                        equipoRegistrado.getNombre().equalsIgnoreCase(equipo.getNombre()));
+        String nombreEquipo = equipoBase.getNombre();
+        boolean equipoRepetido = participacionEquipoDao.findByTorneo(torneo).stream()
+                .anyMatch(participacion -> participacion.getEquipo().getNombre() != null &&
+                participacion.getEquipo().getNombre().equalsIgnoreCase(nombreEquipo));
         if (equipoRepetido) {
             throw new IllegalArgumentException("Ya existe un equipo con ese nombre en el torneo");
         }
 
-        if (equipo.getTorneo().getUbicacion() == null || equipo.getTorneo().getUbicacion().isBlank()) {
+        if (torneo.getUbicacion() == null || torneo.getUbicacion().isBlank()) {
             throw new IllegalArgumentException("El torneo no tiene ubicación registrada");
         }
-        if (equipo.getDelegado().getNumeroCelular() == null || equipo.getDelegado().getNumeroCelular().isBlank()) {
+        if (delegadoSolicitante.getNumeroCelular() == null || delegadoSolicitante.getNumeroCelular().isBlank()) {
             throw new IllegalArgumentException("El delegado debe tener un número de celular registrado");
         }
-        Usuario usuarioDelegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+        Usuario usuarioDelegado = usuarioDao.findByNumeroCelular(delegadoSolicitante.getNumeroCelular());
         if (usuarioDelegado == null || usuarioDelegado.getUbicacion() == null || usuarioDelegado.getUbicacion().isBlank()) {
             throw new IllegalArgumentException("El delegado debe tener una ubicación registrada para enviar solicitudes");
         }
-        if (!usuarioDelegado.getUbicacion().equalsIgnoreCase(equipo.getTorneo().getUbicacion())) {
+        if (!usuarioDelegado.getUbicacion().equalsIgnoreCase(torneo.getUbicacion())) {
             throw new IllegalArgumentException("Solo puedes enviar solicitudes en la misma ubicación del usuario");
         }
-        if (equipo.getTorneo().getEstadoTorneo() == null ||
-                (!equipo.getTorneo().getEstadoTorneo().name().equals("INSCRIPCIONES") &&
-                 !equipo.getTorneo().getEstadoTorneo().name().equals("INSCRIPCIONES_ACTIVO") &&
-                 !equipo.getTorneo().getEstadoTorneo().name().equals("INSCRIPCIONES_ACRIVO"))) {
+        if (torneo.getEstadoTorneo() == null ||
+            (!torneo.getEstadoTorneo().name().equals("INSCRIPCIONES") &&
+             !torneo.getEstadoTorneo().name().equals("INSCRIPCIONES_ACTIVO") &&
+             !torneo.getEstadoTorneo().name().equals("INSCRIPCIONES_ACRIVO"))) {
             throw new IllegalArgumentException("Las solicitudes solo se pueden enviar en estado de inscripciones");
         }
 
-        equipo.setFaseActual(null);
-        equipo.setGrupo(0);
-        equipo.setId(0);
-        return equipoDao.save(equipo);
+        if (equipo.getId() == 0) {
+            equipoBase = save(equipoBase);
+        }
+
+        ParticipacionEquipoTorneo solicitud = new ParticipacionEquipoTorneo();
+        solicitud.setEquipo(equipoBase);
+        solicitud.setTorneo(torneo);
+        solicitud.setEstado("PENDIENTE");
+        solicitud.setFaseActual(null);
+        solicitud.setGrupo(0);
+        ParticipacionEquipoTorneo guardada = participacionEquipoDao.save(solicitud);
+        equipoBase.setParticipacionTorneo(guardada);
+        notificarOrganizadorSolicitudEquipo(guardada);
+        return equipoBase;
     }
 
+    @Transactional(readOnly = true)
     public List<Equipo> getByDelegadoUsuario(long idUsuario) {
         Usuario usuario = usuarioDao.findById(idUsuario).orElse(null);
         if (usuario == null) {
@@ -192,18 +225,21 @@ public class EquipoService {
                 .filter(persona -> usuario.getNumeroCelular() != null && usuario.getNumeroCelular().equals(persona.getNumeroCelular()))
                 .findFirst()
                 .orElse(null);
-        return delegado == null ? List.of() : equipoDao.findByDelegado(delegado);
+        return delegado == null ? List.of() : equipoDao.findByDelegado(delegado).stream()
+            .map(this::materializarLobsEquipo).toList();
     }
 
+    @Transactional
     public void rechazarSolicitud(long id) {
-        Equipo solicitud = equipoDao.findById(id).orElse(null);
-        if (solicitud == null || solicitud.getFaseActual() != null) {
+        ParticipacionEquipoTorneo solicitud = participacionEquipoDao.findById(id).orElse(null);
+        if (solicitud == null || !"PENDIENTE".equals(solicitud.getEstado())) {
             throw new IllegalArgumentException("Solo se pueden rechazar solicitudes pendientes");
         }
         if (!permiteGestionSolicitudes(solicitud.getTorneo())) {
             throw new IllegalArgumentException("Las solicitudes solo se pueden gestionar durante las inscripciones");
         }
-        equipoDao.delete(solicitud);
+        eliminarNotificacionesAccion("SOLICITUD_TORNEO", solicitud.getId());
+        participacionEquipoDao.delete(solicitud);
     }
 
     private int capacidadDeLaFase(Torneo torneo) {
@@ -214,6 +250,7 @@ public class EquipoService {
         return torneo.getCantidadEquipos();
     }
 
+    @Transactional
     public List<Equipo> getSolicitudesByTorneo(Long id) {
         Torneo torneo = torneoDao.findById(id).orElse(null);
         if (torneo == null) {
@@ -222,10 +259,14 @@ public class EquipoService {
         if (!permiteGestionSolicitudes(torneo)) {
             throw new IllegalArgumentException("Las solicitudes solo se pueden gestionar durante las inscripciones");
         }
-        List<Equipo> listaSolicitudes = equipoDao.findByTorneoAndFaseActualIsNull(torneo);
-        return listaSolicitudes;
+        migrarEquiposLegacy(torneo);
+        return participacionEquipoDao.findByTorneoAndEstado(torneo, "PENDIENTE").stream()
+            .map(this::adjuntarParticipacion)
+            .map(this::materializarLobsEquipo)
+            .toList();
     }
 
+    @Transactional
     public List<Equipo> getSolicitudesYAceptadasByTorneo(Long id) {
         Torneo torneo = torneoDao.findById(id).orElse(null);
         if (torneo == null) {
@@ -234,36 +275,92 @@ public class EquipoService {
         if (!permiteGestionSolicitudes(torneo)) {
             throw new IllegalArgumentException("Las solicitudes solo se pueden gestionar durante las inscripciones");
         }
-        return equipoDao.findByTorneo(torneo);
+        migrarEquiposLegacy(torneo);
+        return participacionEquipoDao.findByTorneo(torneo).stream()
+            .map(this::adjuntarParticipacion)
+            .map(this::materializarLobsEquipo)
+            .toList();
     }
 
+    @Transactional
     public Equipo aceptarSolicitud(Long id) {
-        Equipo solicitud = equipoDao.findById(id).orElse(null);
+        ParticipacionEquipoTorneo solicitud = participacionEquipoDao.findById(id).orElse(null);
         if (solicitud == null) {
             throw new IllegalArgumentException("La solicitud no existe");
-        }
-        if (solicitud.getTorneo() == null) {
-            throw new IllegalArgumentException("La solicitud no tiene torneo asociado");
         }
         if (!permiteGestionSolicitudes(solicitud.getTorneo())) {
             throw new IllegalArgumentException("Las solicitudes solo se pueden gestionar durante las inscripciones");
         }
-        if (solicitud.getFaseActual() != null) {
+        if (!"PENDIENTE".equals(solicitud.getEstado())) {
             throw new IllegalArgumentException("La solicitud ya fue aceptada previamente");
         }
-        int cantEquipos = equipoDao.countByTorneoAndFaseActual(solicitud.getTorneo(), solicitud.getTorneo().getFaseTorneo());
+        long cantEquipos = participacionEquipoDao.countByTorneoAndEstado(solicitud.getTorneo(), "ACEPTADO");
         if (capacidadDeLaFase(solicitud.getTorneo()) <= cantEquipos) {
             throw new IllegalArgumentException("El torneo ya alcanzó la cantidad máxima de equipos");
         }
-
+        solicitud.setEstado("ACEPTADO");
         solicitud.setFaseActual(solicitud.getTorneo().getFaseTorneo());
         solicitud.setGrupo(0);
-        return equipoDao.save(solicitud);
+        participacionEquipoDao.save(solicitud);
+        eliminarNotificacionesAccion("SOLICITUD_TORNEO", solicitud.getId());
+        notificarAceptacion(solicitud);
+        return adjuntarParticipacion(solicitud);
     }
 
-    public List<Equipo> getAll() {
-        return equipoDao.findAll();
+    private void notificarAceptacion(ParticipacionEquipoTorneo participacion) {
+        Persona delegado = participacion.getEquipo().getDelegado();
+        if (delegado == null || delegado.getNumeroCelular() == null) return;
+        Usuario usuario = usuarioDao.findByNumeroCelular(delegado.getNumeroCelular());
+        if (usuario == null) return;
+        NotificacionUsuario notificacion = new NotificacionUsuario();
+        notificacion.setUsuario(usuario);
+        notificacion.setTitulo("Equipo aceptado en el torneo");
+        notificacion.setMensaje("El equipo " + participacion.getEquipo().getNombre() +
+                " fue aceptado en " + participacion.getTorneo().getNombre() + ". Ya puedes inscribir jugadores al torneo.");
+        notificacion.setRuta("/auth/torneos/torneo/" + participacion.getTorneo().getId() + "/equipo/" + participacion.getEquipo().getId());
+        notificacion.setCreadaEn(java.time.LocalDateTime.now());
+        notificacion.setLeida(false);
+        notificacionDao.save(notificacion);
     }
+
+    private void notificarOrganizadorSolicitudEquipo(ParticipacionEquipoTorneo participacion) {
+        Usuario organizador = participacion.getTorneo().getEncargadoTorneo();
+        if (organizador == null) return;
+        NotificacionUsuario notificacion = new NotificacionUsuario();
+        notificacion.setUsuario(organizador);
+        notificacion.setTitulo("Nueva solicitud de equipo");
+        notificacion.setMensaje("El equipo " + participacion.getEquipo().getNombre() + " solicitó inscribirse en " +
+                participacion.getTorneo().getNombre() + ".");
+        notificacion.setRuta("/auth/torneos/torneo/" + participacion.getTorneo().getId() + "/solicitudes");
+        notificacion.setTipo("ACCION");
+        notificacion.setReferenciaTipo("SOLICITUD_TORNEO");
+        notificacion.setReferenciaId(participacion.getId());
+        notificacion.setCreadaEn(java.time.LocalDateTime.now());
+        notificacion.setLeida(false);
+        notificacionDao.save(notificacion);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Equipo> getAll() {
+        return equipoDao.findAll().stream().map(this::materializarLobsEquipo).toList();
+    }
+
+    private Equipo materializarLobsEquipo(Equipo equipo) {
+        if (equipo == null) return null;
+        equipo.getEscudo();
+        equipo.getBandera();
+        if (equipo.getDelegado() != null) equipo.getDelegado().getFoto();
+        if (equipo.getEntrenador() != null) equipo.getEntrenador().getFoto();
+        if (equipo.getListaJugadoresActivos() != null) {
+            equipo.getListaJugadoresActivos().forEach(jugador -> jugador.getFoto());
+        }
+        if (equipo.getListaJugadoresInactivos() != null) {
+            equipo.getListaJugadoresInactivos().forEach(jugador -> jugador.getFoto());
+        }
+        return equipo;
+    }
+
+    @Transactional(readOnly = true)
     public Equipo getById(Long id) {
         Equipo equipo = equipoDao.findById(id).orElse(null);
         if (equipo == null) {
@@ -276,14 +373,77 @@ public class EquipoService {
         equipo.setListaJugadoresInactivos(jugadores.stream()
             .filter(jugador -> jugador.getEstadoJugador() != null && !jugador.getEstadoJugador().name().equals("ACTIVO"))
             .toList());
+        equipo.getListaJugadoresActivos().forEach(jugador -> jugador.getFoto());
+        equipo.getListaJugadoresInactivos().forEach(jugador -> jugador.getFoto());
+        return materializarLobsEquipo(equipo);
+    }
+
+    @Transactional
+    public Equipo getByIdAndTorneo(long idEquipo, long idTorneo) {
+        Equipo equipo = getById(idEquipo);
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        ParticipacionEquipoTorneo participacion = obtenerOCrearParticipacionLegacy(equipo, torneo);
+        if (participacion == null || !"ACEPTADO".equals(participacion.getEstado())) {
+            throw new IllegalArgumentException("El equipo no participa en este torneo");
+        }
+        return materializarLobsEquipo(adjuntarParticipacion(participacion));
+    }
+
+    public List<ParticipacionEquipoTorneo> participacionesTorneosEquipo(long idEquipo) {
+        Equipo equipo = equipo(idEquipo);
+        List<ParticipacionEquipoTorneo> participaciones = new ArrayList<>(participacionEquipoDao.findByEquipo(equipo));
+        if (equipo.getTorneo() != null) {
+            obtenerOCrearParticipacionLegacy(equipo, equipo.getTorneo());
+            participaciones = new ArrayList<>(participacionEquipoDao.findByEquipo(equipo));
+        }
+        return participaciones;
+    }
+
+    private ParticipacionEquipoTorneo obtenerOCrearParticipacionLegacy(Equipo equipo, Torneo torneo) {
+        Optional<ParticipacionEquipoTorneo> existente = participacionEquipoDao.findByEquipoAndTorneo(equipo, torneo);
+        if (existente.isPresent() || equipo.getTorneo() == null || equipo.getTorneo().getId() != torneo.getId()) {
+            return existente.orElse(null);
+        }
+        ParticipacionEquipoTorneo participacion = new ParticipacionEquipoTorneo();
+        participacion.setEquipo(equipo);
+        participacion.setTorneo(torneo);
+        participacion.setEstado(equipo.getFaseActual() == null ? "PENDIENTE" : "ACEPTADO");
+        participacion.setFaseActual(equipo.getFaseActual());
+        participacion.setGrupo(equipo.getGrupo());
+        return participacionEquipoDao.save(participacion);
+    }
+
+    private Equipo adjuntarParticipacion(ParticipacionEquipoTorneo participacion) {
+        Equipo equipo = participacion.getEquipo();
+        equipo.setParticipacionTorneo(participacion);
         return equipo;
     }
+
+    private void migrarEquiposLegacy(Torneo torneo) {
+        for (Equipo equipoLegacy : equipoDao.findByTorneo(torneo)) {
+            obtenerOCrearParticipacionLegacy(equipoLegacy, torneo);
+        }
+    }
+
+    @Transactional
     public List<Equipo> getByTorneo(Long id) {
         Torneo torneo = torneoDao.findById(id).orElse(null);
         if (torneo == null) {
             throw new IllegalArgumentException("No existe Torneo con id: " + id);
         }
-        List<Equipo> listaEquipos = equipoDao.findByTorneo(torneo);
+        migrarEquiposLegacy(torneo);
+        List<Equipo> listaEquipos = new ArrayList<>(participacionEquipoDao.findByTorneoAndEstado(torneo, "ACEPTADO").stream()
+            .map(this::adjuntarParticipacion)
+            .map(this::materializarLobsEquipo)
+                .toList());
+        for (Equipo legacy : equipoDao.findByTorneo(torneo)) {
+            if (listaEquipos.stream().noneMatch(equipo -> equipo.getId() == legacy.getId())) {
+                ParticipacionEquipoTorneo participacion = obtenerOCrearParticipacionLegacy(legacy, torneo);
+                if (participacion != null && "ACEPTADO".equals(participacion.getEstado())) {
+                    listaEquipos.add(materializarLobsEquipo(adjuntarParticipacion(participacion)));
+                }
+            }
+        }
         if (listaEquipos.isEmpty()) {
             throw  new IllegalArgumentException("No hay equipos");
         }
@@ -300,7 +460,9 @@ public class EquipoService {
         if (usuario.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR) {
             throw new IllegalArgumentException("Solo los usuarios de tipo jugador pueden registrarse en un equipo");
         }
-        if (equipo.getTorneo() == null || equipo.getTorneo().getId() != torneo.getId() || equipo.getFaseActual() == null) {
+        ParticipacionEquipoTorneo participacionEquipo = participacionEquipoDao.findByEquipoAndTorneo(equipo, torneo)
+            .orElseGet(() -> obtenerOCrearParticipacionLegacy(equipo, torneo));
+        if (participacionEquipo == null || !"ACEPTADO".equals(participacionEquipo.getEstado())) {
             throw new IllegalArgumentException("El equipo no pertenece a este torneo o todavía no está aceptado");
         }
         if (usuario.getCedula() == null || usuario.getCedula().isBlank()) {
@@ -308,7 +470,7 @@ public class EquipoService {
         }
         Jugador jugador = jugadorPorUsuario(usuario);
         ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(torneo, jugador).orElse(null);
-        if (participacion != null && participacion.isParticipando() && participacion.getEquipo().getId() != equipo.getId()) {
+        if (participacion != null && participacion.getEquipo().getId() != equipo.getId()) {
             throw new IllegalArgumentException("El jugador ya participa en este torneo con otro equipo");
         }
         jugador.getEquipos().add(equipo);
@@ -324,6 +486,7 @@ public class EquipoService {
         return jugadorDao.save(jugador);
     }
 
+    @Transactional
     public SolicitudJugadorEquipo solicitarJugador(long idEquipo, long idUsuario) {
         Equipo equipo = equipo(idEquipo);
         Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
@@ -335,7 +498,11 @@ public class EquipoService {
         SolicitudJugadorEquipo solicitud = new SolicitudJugadorEquipo();
         solicitud.setEquipo(equipo);
         solicitud.setJugador(jugador);
-        return solicitudJugadorDao.save(solicitud);
+        SolicitudJugadorEquipo guardada = solicitudJugadorDao.save(solicitud);
+        notificarAccionDelegado(equipo, "Solicitud para unirse al equipo",
+            jugador.getNombre() + " quiere unirse al equipo " + equipo.getNombre() + ".",
+            "SOLICITUD_JUGADOR", guardada.getId());
+        return guardada;
     }
 
     public List<SolicitudJugadorEquipo> solicitudesJugador(long idEquipo, long idUsuario) {
@@ -344,6 +511,7 @@ public class EquipoService {
         return solicitudJugadorDao.findByEquipoAndEstado(equipo, "PENDIENTE");
     }
 
+    @Transactional
     public Equipo aceptarSolicitudJugador(long idSolicitud, long idUsuario) {
         SolicitudJugadorEquipo solicitud = solicitudJugadorDao.findById(idSolicitud).orElseThrow(() -> new IllegalArgumentException("La solicitud no existe"));
         validarDelegado(solicitud.getEquipo(), idUsuario);
@@ -353,24 +521,169 @@ public class EquipoService {
         jugadorDao.save(jugador);
         solicitud.setEstado("ACEPTADA");
         solicitudJugadorDao.save(solicitud);
+        eliminarNotificacionesAccion("SOLICITUD_JUGADOR", solicitud.getId());
         return getById(solicitud.getEquipo().getId());
     }
 
+    @Transactional
     public void rechazarSolicitudJugador(long idSolicitud, long idUsuario) {
         SolicitudJugadorEquipo solicitud = solicitudJugadorDao.findById(idSolicitud).orElseThrow(() -> new IllegalArgumentException("La solicitud no existe"));
         validarDelegado(solicitud.getEquipo(), idUsuario);
         solicitud.setEstado("RECHAZADA");
         solicitudJugadorDao.save(solicitud);
+        eliminarNotificacionesAccion("SOLICITUD_JUGADOR", solicitud.getId());
     }
 
-    public Equipo agregarJugadorPorCedula(long idEquipo, String cedula, long idUsuario) {
+    @Transactional
+    public DtoInvitacionEquipo invitarJugador(long idEquipo, String cedula, long idUsuario) {
         Equipo equipo = equipo(idEquipo);
         validarDelegado(equipo, idUsuario);
-        Jugador jugador = jugadorDao.findByCedula(cedula.trim()).orElseThrow(() -> new IllegalArgumentException("No se encontró un jugador con esa cédula"));
-        jugador.getEquipos().add(equipo);
-        if (jugador.getEquipo() == null) jugador.setEquipo(equipo);
-        jugadorDao.save(jugador);
-        return getById(idEquipo);
+        String cedulaLimpia = cedula == null ? "" : cedula.trim();
+        Jugador jugador = jugadorDao.findByCedula(cedulaLimpia).orElseGet(() -> {
+            Usuario cuenta = usuarioDao.findByCedula(cedulaLimpia);
+            if (cuenta == null || cuenta.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR) {
+                throw new IllegalArgumentException("No se encontró una cuenta de jugador con esa cédula");
+            }
+            return jugadorPorUsuario(cuenta);
+        });
+        if (jugador.getEquipos().contains(equipo)) throw new IllegalArgumentException("El jugador ya pertenece al equipo");
+        if (invitacionEquipoDao.findByEquipoAndJugadorAndEstado(equipo, jugador, "PENDIENTE").isPresent()) {
+            throw new IllegalArgumentException("Ya existe una invitación pendiente para este jugador");
+        }
+        InvitacionEquipo invitacion = new InvitacionEquipo();
+        invitacion.setEquipo(equipo);
+        invitacion.setJugador(jugador);
+        invitacion.setEstado("PENDIENTE");
+        invitacion.setCreadaEn(java.time.LocalDateTime.now());
+        InvitacionEquipo guardada = invitacionEquipoDao.save(invitacion);
+        Usuario jugadorUsuario = usuarioDao.findByCedula(jugador.getCedula());
+        if (jugadorUsuario != null) {
+            NotificacionUsuario notificacion = new NotificacionUsuario();
+            notificacion.setUsuario(jugadorUsuario);
+            notificacion.setTitulo("Invitación a equipo");
+            notificacion.setMensaje("El equipo " + equipo.getNombre() + " te invitó a unirte a su plantel.");
+            notificacion.setRuta("/auth/usuario");
+            notificacion.setTipo("ACCION");
+            notificacion.setReferenciaTipo("INVITACION_EQUIPO");
+            notificacion.setReferenciaId(guardada.getId());
+            notificacion.setCreadaEn(java.time.LocalDateTime.now());
+            notificacion.setLeida(false);
+            notificacionDao.save(notificacion);
+        }
+        return invitacionEquipoDao.buscarDto(guardada.getId())
+                .orElseThrow(() -> new IllegalStateException("No se pudo recuperar la invitación creada"));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DtoInvitacionEquipo> invitacionesJugador(long idUsuario) {
+        Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (usuario.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR || usuario.getCedula() == null) {
+            throw new IllegalArgumentException("Solo una cuenta de jugador puede consultar invitaciones");
+        }
+        return invitacionEquipoDao.listarDtoPorCedulaYEstado(usuario.getCedula(), "PENDIENTE");
+    }
+
+    @Transactional
+    public DtoInvitacionEquipo resolverInvitacionJugador(long idInvitacion, long idUsuario, boolean aceptar) {
+        Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        InvitacionEquipo invitacion = invitacionEquipoDao.findById(idInvitacion)
+                .orElseThrow(() -> new IllegalArgumentException("La invitación no existe"));
+        if (usuario.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR || usuario.getCedula() == null ||
+                !usuario.getCedula().equals(invitacion.getJugador().getCedula())) {
+            throw new IllegalArgumentException("Solo el jugador invitado puede responder esta invitación");
+        }
+        if (!"PENDIENTE".equals(invitacion.getEstado())) throw new IllegalArgumentException("La invitación ya fue respondida");
+        if (aceptar) {
+            invitacion.getJugador().getEquipos().add(invitacion.getEquipo());
+            if (invitacion.getJugador().getEquipo() == null) invitacion.getJugador().setEquipo(invitacion.getEquipo());
+            jugadorDao.save(invitacion.getJugador());
+            invitacion.setEstado("ACEPTADA");
+        } else {
+            invitacion.setEstado("RECHAZADA");
+        }
+        invitacionEquipoDao.save(invitacion);
+        eliminarNotificacionesAccion("INVITACION_EQUIPO", invitacion.getId());
+        return invitacionEquipoDao.buscarDto(idInvitacion)
+            .orElseThrow(() -> new IllegalStateException("No se pudo recuperar la invitación actualizada"));
+    }
+
+    private void notificarAccionDelegado(Equipo equipo, String titulo, String mensaje, String referenciaTipo, Long referenciaId) {
+        if (equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null) return;
+        Usuario delegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+        if (delegado == null) return;
+        NotificacionUsuario notificacion = new NotificacionUsuario();
+        notificacion.setUsuario(delegado);
+        notificacion.setTitulo(titulo);
+        notificacion.setMensaje(mensaje);
+        notificacion.setRuta("/auth/equipo/" + equipo.getId());
+        notificacion.setTipo("ACCION");
+        notificacion.setReferenciaTipo(referenciaTipo);
+        notificacion.setReferenciaId(referenciaId);
+        notificacion.setCreadaEn(java.time.LocalDateTime.now());
+        notificacion.setLeida(false);
+        notificacionDao.save(notificacion);
+    }
+
+    private void eliminarNotificacionesAccion(String referenciaTipo, Long referenciaId) {
+        notificacionDao.deleteByReferenciaTipoAndReferenciaId(referenciaTipo, referenciaId);
+    }
+
+    public Jugador buscarJugadorPorCedula(long idEquipo, String cedula, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        String cedulaLimpia = cedula == null ? "" : cedula.trim();
+        return jugadorDao.findByCedula(cedulaLimpia).orElseGet(() -> {
+            Usuario cuenta = usuarioDao.findByCedula(cedulaLimpia);
+            if (cuenta == null || cuenta.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.JUGADOR) {
+                throw new IllegalArgumentException("No se encontró una cuenta de jugador con esa cédula");
+            }
+            return jugadorPorUsuario(cuenta);
+        });
+    }
+
+    @Transactional
+    public ParticipacionJugadorTorneo agregarJugadorATorneo(long idEquipo, long idTorneo, long idJugador, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        ParticipacionEquipoTorneo participacionEquipo = participacionEquipoDao.findByEquipoAndTorneo(equipo, torneo)
+                .orElseThrow(() -> new IllegalArgumentException("El equipo no participa en este torneo"));
+        if (!"ACEPTADO".equals(participacionEquipo.getEstado())) {
+            throw new IllegalArgumentException("El equipo debe ser aceptado antes de inscribir jugadores");
+        }
+        Jugador jugador = jugadorDao.findById(idJugador).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        if (jugador.getEquipos() == null || jugador.getEquipos().stream().noneMatch(item -> item.getId() == equipo.getId())) {
+            throw new IllegalArgumentException("El jugador debe pertenecer primero al plantel del equipo");
+        }
+        ParticipacionJugadorTorneo existente = participacionDao.findByTorneoAndJugador(torneo, jugador).orElse(null);
+        if (existente != null) {
+            if (existente.getEquipo() != null && existente.getEquipo().getId() == equipo.getId()) return existente;
+            throw new IllegalArgumentException("El jugador ya pertenece a otro equipo en este torneo");
+        }
+        ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
+        participacion.setTorneo(torneo);
+        participacion.setJugador(jugador);
+        participacion.setEquipo(equipo);
+        participacion.setParticipando(false);
+        participacion.setJugoPartido(false);
+        return participacionDao.save(participacion);
+    }
+
+    @Transactional
+    public void eliminarJugadorDeTorneo(long idEquipo, long idTorneo, long idJugador, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        Jugador jugador = jugadorDao.findById(idJugador).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(torneo, jugador)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador no está inscrito en este torneo"));
+        if (participacion.getEquipo() == null || participacion.getEquipo().getId() != equipo.getId()) {
+            throw new IllegalArgumentException("El jugador no está inscrito con este equipo");
+        }
+        if (participacion.isJugoPartido()) {
+            throw new IllegalArgumentException("No se puede quitar del torneo a un jugador que ya participó en un partido");
+        }
+        participacionDao.delete(participacion);
     }
 
     public void eliminarJugador(long idEquipo, long idJugador, long idUsuario) {
@@ -407,6 +720,11 @@ public class EquipoService {
         if (organizador.getTipoUsuario() != com.example.torneos.enums.TipoUsuario.ORGANIZADOR || torneo.getEncargadoTorneo() == null || torneo.getEncargadoTorneo().getId() != organizador.getId()) throw new IllegalArgumentException("Solo el organizador puede cambiar el equipo del jugador");
         Jugador jugador = jugadorDao.findById(idJugador).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
         Equipo equipoNuevo = equipo(idEquipoNuevo);
+        ParticipacionEquipoTorneo participacionEquipoNueva = participacionEquipoDao.findByEquipoAndTorneo(equipoNuevo, torneo)
+            .orElseThrow(() -> new IllegalArgumentException("El equipo destino no participa en este torneo"));
+        if (!"ACEPTADO".equals(participacionEquipoNueva.getEstado())) {
+            throw new IllegalArgumentException("El equipo destino debe estar aceptado en este torneo");
+        }
         ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(torneo, jugador).orElseThrow(() -> new IllegalArgumentException("El jugador aún no está registrado en este torneo"));
         if (participacion.isCambioEquipo()) throw new IllegalArgumentException("El jugador ya realizó su único cambio de equipo en este torneo");
         participacion.setEquipoAnterior(participacion.getEquipo());
@@ -423,6 +741,13 @@ public class EquipoService {
         return participacionDao.findByTorneo(torneo);
     }
 
+    public List<ParticipacionJugadorTorneo> getParticipacionesEquipo(long idEquipo) {
+        Equipo equipo = equipo(idEquipo);
+        return participacionDao.findAll().stream()
+                .filter(participacion -> participacion.getEquipo() != null && participacion.getEquipo().getId() == equipo.getId())
+                .toList();
+    }
+
     private Equipo equipo(long id) {
         return equipoDao.findById(id).orElseThrow(() -> new IllegalArgumentException("El equipo no existe"));
     }
@@ -431,20 +756,12 @@ public class EquipoService {
         if (torneo == null) {
             throw new IllegalArgumentException("No existe Torneo con id: " + id);
         }
-        List<Equipo> listaEquipos = new ArrayList<>();
-        if (modalidadTorneo.equals(ModalidadTorneo.ELIMINATORIAS_GRUPOS)) {
-            listaEquipos = equipoDao.findByTorneo(torneo);
-        } else if (modalidadTorneo.equals(ModalidadTorneo.GRUPOS) || modalidadTorneo.equals(ModalidadTorneo.LIGA)) {
-            List<FaseActual> listFA = new ArrayList<>();
-            listFA.add(FaseActual.FASE_GRUPOS);
-            listFA.add(FaseActual.TREINTAIDOSAVOS);
-            listFA.add(FaseActual.DIECISEISAVOS);
-            listFA.add(FaseActual.OCTAVOS);
-            listFA.add(FaseActual.CUARTOS);
-            listFA.add(FaseActual.SEMIFINAL);
-            listFA.add(FaseActual.FINAL);
-            listaEquipos = equipoDao.findByTorneoAndFaseActualIn(torneo, listFA);
-        }
+        migrarEquiposLegacy(torneo);
+        List<Equipo> listaEquipos = participacionEquipoDao.findByTorneoAndEstado(torneo, "ACEPTADO").stream()
+            .filter(participacion -> modalidadTorneo.equals(ModalidadTorneo.ELIMINATORIAS_GRUPOS) ||
+                participacion.getFaseActual() != null)
+            .map(this::adjuntarParticipacion)
+            .toList();
         if (listaEquipos.size() == 0) {
             throw  new IllegalArgumentException("No hay equipos en esta fase");
         }
@@ -455,7 +772,10 @@ public class EquipoService {
         if (torneo == null) {
             throw new IllegalArgumentException("No existe Torneo con id: " + id);
         }
-        List<Equipo> listaEquipos = equipoDao.findByTorneoAndFaseActual(torneo, faseActual);
+        migrarEquiposLegacy(torneo);
+        List<Equipo> listaEquipos = participacionEquipoDao.findByTorneoAndEstadoAndFaseActual(torneo, "ACEPTADO", faseActual).stream()
+            .map(this::adjuntarParticipacion)
+            .toList();
         if (listaEquipos.size() == 0) {
             throw  new IllegalArgumentException("No hay equipos en esta fase");
         }

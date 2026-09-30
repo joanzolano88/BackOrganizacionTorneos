@@ -38,4 +38,7 @@ public class PagoInscripcion {
     @JoinColumn(nullable = false)
     @JsonIgnore
     private Equipo equipo;
+    @ManyToOne
+    @JoinColumn
+    private Torneo torneo;
 }

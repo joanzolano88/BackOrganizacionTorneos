@@ -1,10 +1,10 @@
 package com.example.torneos.entities;
 
-import com.example.torneos.enums.TipoAmonestacion;
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
-import java.util.Date;
+import java.time.LocalDate;
 
 @Data
 @Entity
@@ -13,8 +13,17 @@ public class Pago {
     @GeneratedValue
     private long id;
     private long valor;
-    private Date fecha;
-    private TipoAmonestacion tipoAmonestacion;
+    @Enumerated(EnumType.STRING)
+    private com.example.torneos.enums.TipoPago tipo;
+    private LocalDate fecha;
+    private String concepto;
+    private String observacion;
+    @Transient
+    private Long usuarioId;
+    @ManyToOne
+    @JoinColumn
+    @JsonIgnore
+    private Usuario registradoPor;
     @JoinColumn
     @ManyToOne
     private Jugador jugador;

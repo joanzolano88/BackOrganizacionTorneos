@@ -8,6 +8,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ParticipacionJugadorTorneoDao extends JpaRepository<ParticipacionJugadorTorneo, Long> {
+    List<ParticipacionJugadorTorneo> findByJugador(Jugador jugador);
     Optional<ParticipacionJugadorTorneo> findByTorneoAndJugador(Torneo torneo, Jugador jugador);
     List<ParticipacionJugadorTorneo> findByTorneo(Torneo torneo);
 }

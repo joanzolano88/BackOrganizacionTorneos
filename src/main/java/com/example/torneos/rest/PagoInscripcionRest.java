@@ -21,13 +21,13 @@ public class PagoInscripcionRest {
     @Autowired
     private PagoInscripcionService pagoService;
 
-    @GetMapping("/equipo/{idEquipo}")
-    public List<PagoInscripcion> listar(@PathVariable long idEquipo) {
-        return pagoService.listarPorEquipo(idEquipo);
+    @GetMapping("/equipo/{idEquipo}/torneo/{idTorneo}")
+    public List<PagoInscripcion> listar(@PathVariable long idEquipo, @PathVariable long idTorneo) {
+        return pagoService.listarPorEquipo(idEquipo, idTorneo);
     }
 
-    @PostMapping("/equipo/{idEquipo}")
-    public PagoInscripcion registrar(@PathVariable long idEquipo, @RequestBody PagoInscripcion pago) {
-        return pagoService.registrar(idEquipo, pago);
+    @PostMapping("/equipo/{idEquipo}/torneo/{idTorneo}")
+    public PagoInscripcion registrar(@PathVariable long idEquipo, @PathVariable long idTorneo, @RequestBody PagoInscripcion pago) {
+        return pagoService.registrar(idEquipo, idTorneo, pago);
     }
 }
