@@ -11,6 +11,8 @@ import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.NotificacionUsuarioDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
+import com.example.torneos.dao.AyudanteTorneoDao;
+import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Torneo;
@@ -58,8 +60,13 @@ public class PartidoService {
     private NotificacionUsuarioDao notificacionDao;
     @Autowired
     private ConvocatoriaPartidoDao convocatoriaDao;
+    @Autowired
+    private AyudanteTorneoDao ayudanteTorneoDao;
+    @Autowired
+    private JugadorDao jugadorDao;
 
-    public Partido save(Partido partido) {
+    public Partido save(Partido partido, long usuarioId) {
+        validarPropietarioTorneo(partido.getTorneo(), usuarioId);
         return partidoDao.save(partido);
     }
     public List<List<Partido>> getTorneo(long idTorneo) {
@@ -216,38 +223,52 @@ public class PartidoService {
                 partido.getEstadoPartido(), partido.getAnotacionesEquipoLocal(), partido.getAnotacionesEquipoVisitante(),
                 partido.getPenaltisEquipoLocal(), partido.getPenaltisEquipoVisitante(), dtoLocal, dtoVisitante, dtoCancha);
     }
-    public List<Partido> generarPartidos(long idTorneo) {
+    public List<Partido> generarPartidos(long idTorneo, long usuarioId) {
         Torneo torneo = torneoDao.findById(idTorneo).get();
+        validarPropietarioTorneo(torneo, usuarioId);
         List<Equipo> equipoList = participacionEquipoDao.findByTorneoAndEstadoAndFaseActual(torneo, "ACEPTADO", torneo.getFaseTorneo()).stream()
             .map(ParticipacionEquipoTorneo::getEquipo)
             .toList();
+        ModalidadFase modalidadFase = modalidadDeFase(torneo);
         List<Partido> partidoList = new ArrayList<>();
         for (int i = 0; i < (equipoList.size() - 1); i++) {
             for (int j = (i + 1); j < equipoList.size(); j++) {
                 if ((torneo.getFaseTorneo().equals(FaseActual.FASE_GRUPOS) && (torneo.getModalidadTorneo().equals(ModalidadTorneo.GRUPOS) || torneo.getModalidadTorneo().equals(ModalidadTorneo.ELIMINATORIAS_GRUPOS)))
                         || torneo.getFaseTorneo().equals(FaseActual.ELIMINATORIAS_GRUPOS)) {
                     if (grupoEnTorneo(torneo, equipoList.get(i)) == grupoEnTorneo(torneo, equipoList.get(j))) {
-                        establecerPartido(torneo, equipoList, partidoList, i, j);
+                        establecerPartido(torneo, equipoList, partidoList, modalidadFase, i, j);
                     }
                 } else if (torneo.getFaseTorneo().equals(FaseActual.FASE_GRUPOS) && torneo.getModalidadTorneo().equals(ModalidadTorneo.LIGA)) {
-                    establecerPartido(torneo, equipoList, partidoList, i, j);
+                    establecerPartido(torneo, equipoList, partidoList, modalidadFase, i, j);
                 } else if (!torneo.getFaseTorneo().equals(FaseActual.FASE_GRUPOS) && !torneo.getFaseTorneo().equals(FaseActual.ELIMINATORIAS_GRUPOS)) {
-                    establecerPartido(torneo, equipoList, partidoList, i, j);
+                    establecerPartido(torneo, equipoList, partidoList, modalidadFase, i, j);
                 }
             }
         }
-        return partidoDao.findAll();
+        return partidoList;
+    }
+
+    private ModalidadFase modalidadDeFase(Torneo torneo) {
+        FaseActual fase = torneo.getFaseTorneo();
+        ModalidadFase modalidad = fase == FaseActual.FASE_GRUPOS || fase == FaseActual.ELIMINATORIAS_GRUPOS
+                ? torneo.getModalidadGrupos()
+                : torneo.getModalidadEliminatorias();
+        if (modalidad == null) {
+            throw new IllegalArgumentException("La modalidad de la fase actual no está configurada");
+        }
+        return modalidad;
     }
     private int grupoEnTorneo(Torneo torneo, Equipo equipo) {
         return participacionEquipoDao.findByEquipoAndTorneo(equipo, torneo)
                 .map(ParticipacionEquipoTorneo::getGrupo)
                 .orElse(0);
     }
-    private void establecerPartido(Torneo torneo,List<Equipo> equipoList,List<Partido> partidoList, int equipo1, int equipo2) {
+    private void establecerPartido(Torneo torneo, List<Equipo> equipoList, List<Partido> partidoList,
+                                   ModalidadFase modalidad, int equipo1, int equipo2) {
         Partido partidoExiste = partidoDao.findByTorneoAndEquipoLocalAndEquipoVisitanteAndFaseEncuentro(torneo,equipoList.get(equipo1), equipoList.get(equipo2), torneo.getFaseTorneo());
         Partido partidoExiste2 = partidoDao.findByTorneoAndEquipoLocalAndEquipoVisitanteAndFaseEncuentro(torneo,equipoList.get(equipo2), equipoList.get(equipo1), torneo.getFaseTorneo());
         Partido partido = new Partido();
-        if (torneo.getModalidadGrupos().equals(ModalidadFase.PARTIDO_UNICO)) {
+        if (modalidad == ModalidadFase.PARTIDO_UNICO) {
             if (partidoExiste == null && partidoExiste2 == null) {
                 partido.setEquipoLocal(equipoList.get(equipo1));
                 partido.setEquipoVisitante(equipoList.get(equipo2));
@@ -258,7 +279,7 @@ public class PartidoService {
                 partido = partidoDao.save(partido);
                 partidoList.add(partido);
             }
-        } else if (torneo.getModalidadGrupos().equals(ModalidadFase.IDA_VUELTA)) {
+        } else if (modalidad == ModalidadFase.IDA_VUELTA) {
             if (partidoExiste == null) {
                 partido.setEquipoLocal(equipoList.get(equipo1));
                 partido.setEquipoVisitante(equipoList.get(equipo2));
@@ -282,11 +303,12 @@ public class PartidoService {
             }
         }
     }
-    public Partido asignarFecha(Partido partido) {
+    public Partido asignarFecha(Partido partido, long usuarioId) {
         if (partido == null || partido.getId() == 0 || partido.getFechaPartido() == null || partido.getCancha() == null) {
             throw new IllegalArgumentException("El partido, la fecha y la cancha son obligatorios");
         }
         Partido partidoProgramado = partidoDao.findById(partido.getId()).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(partidoProgramado, usuarioId);
         LocalDateTime fechaAnterior = partidoProgramado.getFechaPartido();
         Long canchaAnterior = partidoProgramado.getCancha() == null ? null : partidoProgramado.getCancha().getId();
         partidoProgramado.setFechaPartido(partido.getFechaPartido());
@@ -443,18 +465,27 @@ public class PartidoService {
         }
         return resulatoLlaveList;
     }
-    public Partido update(Partido partido) {
+    public Partido update(Partido partido, long usuarioId) {
+        Partido existente = partidoDao.findById(partido.getId()).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(existente, usuarioId);
+        partido.setTorneo(existente.getTorneo());
+        partido.setFaseEncuentro(existente.getFaseEncuentro());
         return partidoDao.save(partido);
     }
-    public Partido sumarGol(Partido partido) {
+    public Partido sumarGol(Partido partido, long usuarioId) {
+        Partido existente = partidoDao.findById(partido.getId()).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(existente, usuarioId);
         if (partido.getEstadoPartido().equals(EstadoPartido.EN_PROCESO)) {
+            partido.setTorneo(existente.getTorneo());
+            partido.setFaseEncuentro(existente.getFaseEncuentro());
             return partidoDao.save(partido);
         }
         throw new IllegalArgumentException("El partido no esta en juego");
     }
-    public Partido iniciarPartido(long id) {
+    public Partido iniciarPartido(long id, long usuarioId) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(partido, usuarioId);
         if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO) {
             throw new IllegalArgumentException("Solo se puede iniciar un partido programado");
         }
@@ -467,9 +498,10 @@ public class PartidoService {
         partido.setEstadoPartido(EstadoPartido.EN_PROCESO);
         return partidoDao.save(partido);
     }
-    public Partido terminarPartido(long id) {
+    public Partido terminarPartido(long id, long usuarioId) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(partido, usuarioId);
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Solo se puede terminar un partido en proceso");
         }
@@ -482,9 +514,10 @@ public class PartidoService {
         }
         return guardado;
     }
-    public Partido terminarPartidoPenaltis(long id, String gandor) {
+    public Partido terminarPartidoPenaltis(long id, String gandor, long usuarioId) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(partido, usuarioId);
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Solo se pueden registrar penaltis en un partido en proceso");
         }
@@ -522,15 +555,17 @@ public class PartidoService {
             participacionDao.save(participacion);
         });
     }
-    public Partido cancelarPartido(long id) {
+    public Partido cancelarPartido(long id, long usuarioId) {
         Partido partido = partidoDao.findById(id).get();
+        validarGestorPartido(partido, usuarioId);
         partido.setFechaPartido(null);
         partido.setCancha(null);
         partido.setEstadoPartido(EstadoPartido.PENDIENTE);
         return partidoDao.save(partido);
     }
-    public Partido cambiarMarcador(Partido partido) {
+    public Partido cambiarMarcador(Partido partido, long usuarioId) {
         Partido partidoAntiguo = partidoDao.findById(partido.getId()).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        validarGestorPartido(partidoAntiguo, usuarioId);
         partido.setTorneo(partidoAntiguo.getTorneo());
         partido.setFaseEncuentro(partidoAntiguo.getFaseEncuentro());
         Partido guardado = partidoDao.save(partido);
@@ -539,6 +574,45 @@ public class PartidoService {
             recalcularParticipacionesEquipo(guardado.getTorneo(), guardado.getFaseEncuentro());
         }
         return guardado;
+    }
+
+    public boolean puedeGestionarPartido(long partidoId, long usuarioId) {
+        Partido partido = partidoDao.findById(partidoId).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
+        try {
+            validarGestorPartido(partido, usuarioId);
+            return true;
+        } catch (IllegalArgumentException error) {
+            return false;
+        }
+    }
+
+    private void validarGestorPartido(Partido partido, long usuarioId) {
+        Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        Torneo torneo = partido.getTorneo();
+        boolean propietario = torneo.getEncargadoTorneo() != null && torneo.getEncargadoTorneo().getId() == usuarioId;
+        boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(torneo, usuario).isPresent();
+        if (!propietario && !ayudante) throw new IllegalArgumentException("Solo el organizador o un ayudante autorizado puede gestionar partidos");
+        if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) return;
+        jugadorDao.findByIdentificacion(usuario.getIdentificacion()).ifPresent(jugador -> {
+            boolean porParticipacion = participacionDao.findByTorneoAndJugador(torneo, jugador)
+                    .map(item -> partido.getEquipoLocal() != null && item.getEquipo().getId() == partido.getEquipoLocal().getId()
+                            || partido.getEquipoVisitante() != null && item.getEquipo().getId() == partido.getEquipoVisitante().getId())
+                    .orElse(false);
+            boolean porRelacionEquipo = jugador.getEquipos() != null && jugador.getEquipos().stream()
+                    .anyMatch(equipo -> partido.getEquipoLocal() != null && equipo.getId() == partido.getEquipoLocal().getId()
+                            || partido.getEquipoVisitante() != null && equipo.getId() == partido.getEquipoVisitante().getId());
+            boolean convocado = convocatoriaDao.findByPartidoAndJugador(partido, jugador).isPresent();
+            if (porParticipacion || porRelacionEquipo || convocado) {
+                throw new IllegalArgumentException("Un jugador de este partido no puede gestionarlo; debe hacerlo otro ayudante");
+            }
+        });
+    }
+
+    private void validarPropietarioTorneo(Torneo torneo, long usuarioId) {
+        Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (torneo == null || torneo.getEncargadoTorneo() == null || torneo.getEncargadoTorneo().getId() != usuario.getId()) {
+            throw new IllegalArgumentException("Solo el organizador propietario puede generar partidos");
+        }
     }
 
     private void recalcularParticipacionesEquipo(Torneo torneo, FaseActual fase) {

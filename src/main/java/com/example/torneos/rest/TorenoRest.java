@@ -4,6 +4,7 @@ import com.example.torneos.DTO.DtoGrupoEquipo;
 import com.example.torneos.DTO.DtoGrupoLlave;
 import com.example.torneos.DTO.DtoOptionTorneo;
 import com.example.torneos.DTO.DtoDistribucionEquipo;
+import com.example.torneos.DTO.DtoAyudanteTorneo;
 import com.example.torneos.entities.GrupoLlave;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Reglamento;
@@ -14,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -31,12 +33,12 @@ public class TorenoRest {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public Torneo save(@RequestPart("objeto") String torneoS) throws JsonMappingException, JsonProcessingException, IOException {
+    public Torneo save(@RequestPart("objeto") String torneoS, @AuthenticationPrincipal Long usuarioId) throws JsonMappingException, JsonProcessingException, IOException {
         ObjectMapper mapper = new ObjectMapper();
         Torneo torneo = mapper.readValue(torneoS, Torneo.class);
         //Reglamento reglamento = new Reglamento();
         //reglamento.setReglamento(file.getBytes());
-        return torenoService.save(torneo, null);
+        return torenoService.save(torneo, null, usuarioId);
     }
 
     @GetMapping
@@ -55,14 +57,37 @@ public class TorenoRest {
         return torenoService.getOptionByCiudad(ciudadId);
     }
 
+    @GetMapping("/{idTorneo}/ayudantes")
+    public List<DtoAyudanteTorneo> listarAyudantes(@PathVariable long idTorneo, @AuthenticationPrincipal Long usuarioId) {
+        return torenoService.listarAyudantes(idTorneo, usuarioId);
+    }
+
+    @GetMapping("/{idTorneo}/puede-registrar-equipos")
+    public boolean puedeRegistrarEquipos(@PathVariable long idTorneo, @AuthenticationPrincipal Long usuarioId) {
+        return usuarioId != null && torenoService.puedeRegistrarEquipos(idTorneo, usuarioId);
+    }
+
+    @PostMapping("/{idTorneo}/ayudantes")
+    public DtoAyudanteTorneo agregarAyudante(@PathVariable long idTorneo, @AuthenticationPrincipal Long usuarioId,
+                                             @RequestParam String identificacion) {
+        return torenoService.agregarAyudante(idTorneo, usuarioId, identificacion);
+    }
+
+    @DeleteMapping("/{idTorneo}/ayudantes/{ayudanteUsuarioId}")
+    public void eliminarAyudante(@PathVariable long idTorneo, @PathVariable long ayudanteUsuarioId,
+                                 @AuthenticationPrincipal Long usuarioId) {
+        torenoService.eliminarAyudante(idTorneo, ayudanteUsuarioId, usuarioId);
+    }
+
     @GetMapping("/{id}")
     public Torneo getById(@PathVariable long id){
         return torenoService.getById(id);
     }
 
     @PutMapping("/cambiar_fase_torneo/{idTorneo}")
-    public void cabiarFaseTorneo(@RequestBody List<DtoGrupoEquipo> listGrupoEquipo, @PathVariable long idTorneo) {
-        torenoService.cabiarFaseTorneo(listGrupoEquipo, idTorneo);
+    public void cabiarFaseTorneo(@RequestBody List<DtoGrupoEquipo> listGrupoEquipo, @PathVariable long idTorneo,
+                                 @AuthenticationPrincipal Long usuarioId) {
+        torenoService.cabiarFaseTorneo(listGrupoEquipo, idTorneo, usuarioId);
     }
 
     @GetMapping("/{idTorneo}/distribucion")
@@ -76,12 +101,14 @@ public class TorenoRest {
     }
 
     @PutMapping("/{idTorneo}/grupo-llave")
-    public List<GrupoLlave> guardarGrupoLlave(@PathVariable long idTorneo, @RequestBody List<DtoGrupoLlave> grupos) {
-        return torenoService.guardarGrupoLlave(idTorneo, grupos);
+    public List<GrupoLlave> guardarGrupoLlave(@PathVariable long idTorneo, @RequestBody List<DtoGrupoLlave> grupos,
+                                              @AuthenticationPrincipal Long usuarioId) {
+        return torenoService.guardarGrupoLlave(idTorneo, grupos, usuarioId);
     }
 
     @GetMapping("/usuario/{id}")
-    public List<Torneo>  getByUsuarioId(@PathVariable long id){
+    public List<Torneo> getByUsuarioId(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){
+        if (usuarioId == null || usuarioId != id) throw new IllegalArgumentException("Solo puedes consultar tus propios torneos");
         return torenoService.getByUsuarioId(id);
     }
     @GetMapping("/reglamento/{id}")
@@ -90,16 +117,16 @@ public class TorenoRest {
     }
 
     @PutMapping("/cambiar_fase/{idTorneo}")
-    public void camabiarFase(@PathVariable long idTorneo){
-        torenoService.cambiarFaseTorneo(idTorneo);
+    public void camabiarFase(@PathVariable long idTorneo, @AuthenticationPrincipal Long usuarioId){
+        torenoService.cambiarFaseTorneo(idTorneo, usuarioId);
     }
     @PutMapping()
-    public Torneo update(@RequestBody Torneo torneo){
-        return torenoService.update(torneo);
+    public Torneo update(@RequestBody Torneo torneo, @AuthenticationPrincipal Long usuarioId){
+        return torenoService.update(torneo, usuarioId);
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable long id){
-        torenoService.delete(id);
+    public void delete(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){
+        torenoService.delete(id, usuarioId);
     }
 }

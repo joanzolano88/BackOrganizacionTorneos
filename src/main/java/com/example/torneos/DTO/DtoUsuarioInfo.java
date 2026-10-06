@@ -8,6 +8,8 @@ public class DtoUsuarioInfo {
     private long id;
     private TipoUsuario tipoUsuario;
     private String nombre;
+    private String identificacion;
     private String numeroCelular;
     private String ubicacion;
+    private String token;
 }

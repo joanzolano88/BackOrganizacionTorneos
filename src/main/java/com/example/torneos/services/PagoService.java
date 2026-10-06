@@ -29,18 +29,21 @@ public class PagoService {
 
     @Transactional(readOnly = true)
     public List<DtoPago> listar(long idTorneo, long idUsuario) {
-        usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("Debes iniciar sesión para consultar pagos"));
-        if (!torneoDao.existsById(idTorneo)) throw new IllegalArgumentException("El torneo no existe");
+        Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("Debes iniciar sesión para consultar pagos"));
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        boolean propietario = torneo.getEncargadoTorneo() != null && torneo.getEncargadoTorneo().getId() == usuario.getId();
+        boolean delegado = equipoDelegadoEnTorneo(idTorneo, usuario);
+        if (!propietario && !delegado) throw new IllegalArgumentException("No tienes permiso para consultar los pagos de este torneo");
         return pagoDao.listarDtoPorTorneo(idTorneo);
     }
 
     @Transactional
-    public DtoPago registrar(long idTorneo, Pago pago) {
-        if (pago == null || pago.getUsuarioId() == null || pago.getValor() <= 0) {
+    public DtoPago registrar(long idTorneo, Pago pago, long usuarioAutenticadoId) {
+        if (pago == null || pago.getValor() <= 0) {
             throw new IllegalArgumentException("El pago y su monto son obligatorios");
         }
         Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
-        Usuario organizador = usuarioDao.findById(pago.getUsuarioId()).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        Usuario organizador = usuarioDao.findById(usuarioAutenticadoId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
         if (organizador.getTipoUsuario() != TipoUsuario.ORGANIZADOR || torneo.getEncargadoTorneo() == null ||
                 torneo.getEncargadoTorneo().getId() != organizador.getId()) {
             throw new IllegalArgumentException("Solo el organizador del torneo puede registrar pagos");
@@ -69,9 +72,18 @@ public class PagoService {
         return pagoDao.buscarDto(guardado.getId());
     }
 
+    private boolean equipoDelegadoEnTorneo(long torneoId, Usuario usuario) {
+        if (usuario.getNumeroCelular() == null) return false;
+        Torneo torneo = torneoDao.findById(torneoId).orElse(null);
+        if (torneo == null) return false;
+        return participacionEquipoDao.findByTorneoAndEstado(torneo, "ACEPTADO").stream()
+            .anyMatch(participacion -> participacion.getEquipo().getDelegado() != null &&
+                usuario.getNumeroCelular().equals(participacion.getEquipo().getDelegado().getNumeroCelular()));
+    }
+
     private void notificarDestinatario(Pago pago) {
         Usuario destinatario = pago.getJugador() != null
-                ? usuarioDao.findByCedula(pago.getJugador().getCedula())
+                ? usuarioDao.findByIdentificacion(pago.getJugador().getIdentificacion())
                 : pago.getEquipo().getDelegado() == null ? null
                 : usuarioDao.findByNumeroCelular(pago.getEquipo().getDelegado().getNumeroCelular());
         if (destinatario == null) return;

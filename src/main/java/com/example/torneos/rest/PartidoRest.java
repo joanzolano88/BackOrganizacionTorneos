@@ -10,6 +10,7 @@ import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.services.PartidoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,8 +24,8 @@ public class PartidoRest {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Partido save(@RequestBody Partido partido){
-        return partidoService.save(partido);
+    public Partido save(@RequestBody Partido partido, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.save(partido, usuarioId);
     }
     @GetMapping("torneo/{idTorneo}")
     public List<List<Partido>> getTorneo(@PathVariable long idTorneo){
@@ -60,48 +61,52 @@ public class PartidoRest {
         return partidoService.getPartidosFechaTorneo(fecha, idTorneo);
     }
     @GetMapping("generar_partidos/{idTorneo}")
-    public List<Partido> generarPartidos(@PathVariable long idTorneo){
-        return partidoService.generarPartidos(idTorneo);
+    public List<Partido> generarPartidos(@PathVariable long idTorneo, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.generarPartidos(idTorneo, usuarioId);
     }
     @PutMapping("asignar_fecha")
-    public Partido asignarFecha(@RequestBody Partido partido) {
-        return partidoService.asignarFecha(partido);
+    public Partido asignarFecha(@RequestBody Partido partido, @AuthenticationPrincipal Long usuarioId) {
+        return partidoService.asignarFecha(partido, usuarioId);
     }
     @GetMapping("/{id}")
     public Partido getById(@PathVariable long id){
         return partidoService.getById(id);
+    }
+    @GetMapping("/{id}/puede-gestionar")
+    public boolean puedeGestionar(@PathVariable long id, @AuthenticationPrincipal Long usuarioId) {
+        return partidoService.puedeGestionarPartido(id, usuarioId);
     }
     @GetMapping("/eliminatorias_torneo/{idTorneo}")
     public List<DtoResulatoLlave> getEliminatoriasTorneo(@PathVariable long idTorneo){
         return partidoService.getEliminatoriasTorneo(idTorneo);
     }
     @PutMapping()
-    public Partido update(@RequestBody Partido partido){
-        return partidoService.update(partido);
+    public Partido update(@RequestBody Partido partido, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.update(partido, usuarioId);
     }
     @PutMapping("/sumar_gol")
-    public Partido sumarGol(@RequestBody Partido partido){
-        return partidoService.sumarGol(partido);
+    public Partido sumarGol(@RequestBody Partido partido, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.sumarGol(partido, usuarioId);
     }
     @PutMapping("iniciar/{id}")
-    public Partido iniciarPartido(@PathVariable long id){
-        return partidoService.iniciarPartido(id);
+    public Partido iniciarPartido(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.iniciarPartido(id, usuarioId);
     }
     @PutMapping("terminar/{id}")
-    public Partido terminarPartido(@PathVariable long id){
-        return partidoService.terminarPartido(id);
+    public Partido terminarPartido(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.terminarPartido(id, usuarioId);
     }
     @PutMapping("terminar-penaltis/{id}/{ganador}")
-    public Partido terminarPartidoPenaltis(@PathVariable long id, @PathVariable String ganador){
-        return partidoService.terminarPartidoPenaltis(id, ganador);
+    public Partido terminarPartidoPenaltis(@PathVariable long id, @PathVariable String ganador, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.terminarPartidoPenaltis(id, ganador, usuarioId);
     }
     @PutMapping("cancelar/{id}")
-    public Partido cancelarPartido(@PathVariable long id){
-        return partidoService.cancelarPartido(id);
+    public Partido cancelarPartido(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.cancelarPartido(id, usuarioId);
     }
     @PutMapping("modificar-marcador")
-    public Partido cambiarMarcador(@RequestBody Partido partido){
-        return partidoService.cambiarMarcador(partido);
+    public Partido cambiarMarcador(@RequestBody Partido partido, @AuthenticationPrincipal Long usuarioId){
+        return partidoService.cambiarMarcador(partido, usuarioId);
     }
 /*
     @DeleteMapping("/{id}")

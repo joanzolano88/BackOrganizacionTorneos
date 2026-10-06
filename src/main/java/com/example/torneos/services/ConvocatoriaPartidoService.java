@@ -8,6 +8,7 @@ import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
+import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.EventoPartido;
 import com.example.torneos.entities.Equipo;
@@ -38,6 +39,7 @@ public class ConvocatoriaPartidoService {
     @Autowired private InvitacionPartidoDao invitacionDao;
     @Autowired private EquipoDao equipoDao;
     @Autowired private UsuarioDao usuarioDao;
+    @Autowired private AyudanteTorneoDao ayudanteTorneoDao;
     @Autowired private TorneoDao torneoDao;
     @Autowired private EventoPartidoDao eventoDao;
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
@@ -51,12 +53,12 @@ public class ConvocatoriaPartidoService {
         return jugadorDao.findByEquipo(equipo(equipoId));
     }
 
-    public Jugador buscarPorCedula(long partidoId, String cedula, long usuarioId) {
+    public Jugador buscarPorIdentificacion(long partidoId, String identificacion, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        Jugador jugador = jugadorDao.findByCedula(cedula.trim())
-            .orElseThrow(() -> new IllegalArgumentException("No se encontró un jugador con esa cédula"));
+        Jugador jugador = jugadorDao.findByIdentificacion(identificacion.trim())
+            .orElseThrow(() -> new IllegalArgumentException("No se encontró un jugador con esa identificación"));
         validarEquipoDelDelegado(partido, jugador.getEquipo(), usuario);
         return jugador;
     }
@@ -91,18 +93,18 @@ public class ConvocatoriaPartidoService {
     }
 
     @Transactional
-    public ConvocatoriaPartido agregarPorCedula(long partidoId, String identificacion, boolean titular, long usuarioId) {
+    public ConvocatoriaPartido agregarPorIdentificacion(long partidoId, String identificacion, boolean titular, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        Jugador jugador = jugadorDao.findByCedula(identificacion.trim()).orElse(null);
+        Jugador jugador = jugadorDao.findByIdentificacion(identificacion.trim()).orElse(null);
         if (jugador == null) {
             Equipo equipo = equipoDelGestor(partido, usuario);
-            if (equipo.getDelegado() == null || !identificacion.trim().equals(equipo.getDelegado().getCedula())) {
-                throw new IllegalArgumentException("No se encontró un jugador con esa cédula");
+            if (equipo.getDelegado() == null || !identificacion.trim().equals(equipo.getDelegado().getIdentificacion())) {
+                throw new IllegalArgumentException("No se encontró un jugador con esa identificación");
             }
             jugador = new Jugador();
-            jugador.setCedula(equipo.getDelegado().getCedula());
+            jugador.setIdentificacion(equipo.getDelegado().getIdentificacion());
             jugador.setNombre(equipo.getDelegado().getNombre());
             jugador.setNumeroCelular(equipo.getDelegado().getNumeroCelular());
             jugador.setEquipo(equipo);
@@ -262,12 +264,12 @@ public class ConvocatoriaPartidoService {
         if (usuario.getTipoUsuario() != TipoUsuario.JUGADOR) {
             throw new IllegalArgumentException("Solo un usuario de tipo jugador puede aceptar esta invitación");
         }
-        if (usuario.getCedula() == null || usuario.getCedula().isBlank()) {
-            throw new IllegalArgumentException("El usuario jugador debe tener cédula registrada");
+        if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) {
+            throw new IllegalArgumentException("El usuario jugador debe tener una identificación registrada");
         }
-        Jugador jugador = jugadorDao.findByCedula(usuario.getCedula()).orElseGet(() -> {
+        Jugador jugador = jugadorDao.findByIdentificacion(usuario.getIdentificacion()).orElseGet(() -> {
             Jugador nuevo = new Jugador();
-            nuevo.setCedula(usuario.getCedula());
+            nuevo.setIdentificacion(usuario.getIdentificacion());
             nuevo.setNombre(usuario.getNombre());
             nuevo.setNumeroCelular(usuario.getNumeroCelular());
             nuevo.setCorreoElectronico(usuario.getCorreoElectronico());
@@ -333,7 +335,11 @@ public class ConvocatoriaPartidoService {
     }
 
     private void validarGestor(Partido partido, Usuario usuario) {
-        if (usuario.getTipoUsuario() == TipoUsuario.ORGANIZADOR && partido.getTorneo().getEncargadoTorneo() != null && partido.getTorneo().getEncargadoTorneo().getId() == usuario.getId()) {
+        boolean propietario = partido.getTorneo().getEncargadoTorneo() != null &&
+                partido.getTorneo().getEncargadoTorneo().getId() == usuario.getId();
+        boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), usuario).isPresent();
+        if (propietario || ayudante) {
+            validarNoJugador(partido, usuario);
             return;
         }
         if (usuario.getTipoUsuario() == TipoUsuario.DELEGADO && esDelegadoDeEquipo(partido.getEquipoLocal(), usuario) || usuario.getTipoUsuario() == TipoUsuario.DELEGADO && esDelegadoDeEquipo(partido.getEquipoVisitante(), usuario)) {
@@ -343,8 +349,27 @@ public class ConvocatoriaPartidoService {
     }
 
     private void validarGestorOrganizador(Partido partido, Usuario usuario) {
-        if (usuario.getTipoUsuario() != TipoUsuario.ORGANIZADOR || partido.getTorneo().getEncargadoTorneo() == null || partido.getTorneo().getEncargadoTorneo().getId() != usuario.getId()) {
-            throw new IllegalArgumentException("Solo el organizador del torneo puede registrar goles y tarjetas");
+        boolean propietario = partido.getTorneo().getEncargadoTorneo() != null &&
+                partido.getTorneo().getEncargadoTorneo().getId() == usuario.getId();
+        boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), usuario).isPresent();
+        if (!propietario && !ayudante) throw new IllegalArgumentException("Solo el organizador o un ayudante puede gestionar el partido");
+        validarNoJugador(partido, usuario);
+    }
+
+    private void validarNoJugador(Partido partido, Usuario usuario) {
+        if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) return;
+        Jugador jugador = jugadorDao.findByIdentificacion(usuario.getIdentificacion()).orElse(null);
+        if (jugador == null) return;
+        boolean convocado = convocatoriaDao.findByPartidoAndJugador(partido, jugador).isPresent();
+        boolean inscritoEnEquipos = jugador.getEquipos() != null && jugador.getEquipos().stream()
+                .anyMatch(equipo -> partido.getEquipoLocal() != null && equipo.getId() == partido.getEquipoLocal().getId()
+                        || partido.getEquipoVisitante() != null && equipo.getId() == partido.getEquipoVisitante().getId());
+        boolean participacionTorneo = participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador)
+                .map(item -> partido.getEquipoLocal() != null && item.getEquipo().getId() == partido.getEquipoLocal().getId()
+                        || partido.getEquipoVisitante() != null && item.getEquipo().getId() == partido.getEquipoVisitante().getId())
+                .orElse(false);
+        if (convocado || inscritoEnEquipos || participacionTorneo) {
+            throw new IllegalArgumentException("Un jugador de este partido no puede gestionarlo; debe hacerlo otro ayudante");
         }
     }
 

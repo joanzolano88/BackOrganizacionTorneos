@@ -162,8 +162,8 @@ public class SancionJugadorTorneoService {
     }
 
     private void notificarJugador(Jugador jugador, String titulo, String mensaje, Torneo torneo, Equipo equipo) {
-        if (jugador.getCedula() == null) return;
-        Usuario usuario = usuarioDao.findByCedula(jugador.getCedula());
+        if (jugador.getIdentificacion() == null) return;
+        Usuario usuario = usuarioDao.findByIdentificacion(jugador.getIdentificacion());
         if (usuario == null) return;
         NotificacionUsuario notificacion = new NotificacionUsuario();
         notificacion.setUsuario(usuario);

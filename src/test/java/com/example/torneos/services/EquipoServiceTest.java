@@ -1,6 +1,7 @@
 package com.example.torneos.services;
 
 import com.example.torneos.dao.EquipoDao;
+import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
@@ -10,6 +11,7 @@ import com.example.torneos.dao.PersonaDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.entities.Equipo;
+import com.example.torneos.entities.AyudanteTorneo;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.ParticipacionJugadorTorneo;
 import com.example.torneos.entities.ParticipacionEquipoTorneo;
@@ -17,6 +19,8 @@ import com.example.torneos.entities.NotificacionUsuario;
 import com.example.torneos.entities.Persona;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
+import com.example.torneos.DTO.DtoRegistroPlanilla;
+import com.example.torneos.DTO.DtoResultadoRegistroPlanilla;
 import com.example.torneos.enums.EstadoTorneo;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.TipoUsuario;
@@ -70,6 +74,9 @@ class EquipoServiceTest {
     @Mock
     private NotificacionUsuarioDao notificacionDao;
 
+    @Mock
+    private AyudanteTorneoDao ayudanteTorneoDao;
+
     @InjectMocks
     private EquipoService equipoService;
 
@@ -84,6 +91,14 @@ class EquipoServiceTest {
         torneo.setCantidadEquipos(8);
         torneo.setEstadoTorneo(EstadoTorneo.INSCRIPCIONES);
         torneo.setFaseTorneo(FaseActual.FASE_GRUPOS);
+
+        Usuario usuarioDelegado = new Usuario();
+        usuarioDelegado.setId(5L);
+        usuarioDelegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        usuarioDelegado.setNombre("Ana");
+        usuarioDelegado.setNumeroCelular("3001234567");
+        usuarioDelegado.setUbicacion("Popayan");
+        lenient().when(usuarioDao.findById(5L)).thenReturn(Optional.of(usuarioDelegado));
 
         delegado = new Persona();
         delegado.setId(5L);
@@ -114,7 +129,7 @@ class EquipoServiceTest {
         when(participacionEquipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
         when(participacionEquipoDao.save(any(ParticipacionEquipoTorneo.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Equipo resultado = equipoService.saveSolicitud(solicitud);
+        Equipo resultado = equipoService.saveSolicitud(solicitud, 5L);
 
         assertNotNull(resultado);
         assertNull(resultado.getFaseActual());
@@ -123,6 +138,81 @@ class EquipoServiceTest {
         assertEquals("PENDIENTE", resultado.getParticipacionTorneo().getEstado());
         assertEquals(10L, resultado.getParticipacionTorneo().getTorneo().getId());
         verify(equipoDao, never()).save(any(Equipo.class));
+    }
+
+    @Test
+    void registrarPlanilla_debePermitirAyudanteYCrearPerfilesConIdentificacionComoClave() {
+        Usuario ayudante = new Usuario();
+        ayudante.setId(8L);
+        torneo.setEncargadoTorneo(usuarioDelegadoNoExiste());
+        when(usuarioDao.findById(8L)).thenReturn(Optional.of(ayudante));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, ayudante)).thenReturn(Optional.of(new AyudanteTorneo()));
+        when(equipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
+        when(participacionEquipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
+        when(personaDao.findByIdentificacion("D-100")).thenReturn(Optional.empty());
+        when(jugadorDao.findByIdentificacion("J-100")).thenReturn(Optional.empty());
+        when(equipoDao.save(any(Equipo.class))).thenAnswer(invocation -> {
+            Equipo equipo = invocation.getArgument(0);
+            equipo.setId(100L);
+            return equipo;
+        });
+        when(usuarioDao.save(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(personaDao.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jugadorDao.save(any(Jugador.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(participacionEquipoDao.save(any(ParticipacionEquipoTorneo.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(participacionDao.save(any(ParticipacionJugadorTorneo.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DtoRegistroPlanilla resultado = crearPlanilla("Equipo Azul", "Delegada", "D-100", "Jugador Uno", "J-100");
+
+        DtoResultadoRegistroPlanilla registrado = equipoService.registrarPlanilla(10L, resultado, 8L);
+
+        assertEquals(100L, registrado.getEquipoId());
+        assertEquals("Equipo Azul", registrado.getNombreEquipo());
+        assertEquals(1, registrado.getJugadoresRegistrados());
+        org.mockito.ArgumentCaptor<Usuario> cuentas = org.mockito.ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioDao, times(2)).save(cuentas.capture());
+        assertTrue(cuentas.getAllValues().stream().allMatch(cuenta -> cuenta.getContrasena().equals(cuenta.getIdentificacion())));
+        assertTrue(cuentas.getAllValues().stream().anyMatch(cuenta -> cuenta.getTipoUsuario() == TipoUsuario.DELEGADO));
+        assertTrue(cuentas.getAllValues().stream().anyMatch(cuenta -> cuenta.getTipoUsuario() == TipoUsuario.JUGADOR));
+        verify(participacionEquipoDao).save(org.mockito.ArgumentMatchers.argThat(participacion -> "ACEPTADO".equals(participacion.getEstado())));
+        verify(participacionDao).save(any(ParticipacionJugadorTorneo.class));
+    }
+
+    @Test
+    void registrarPlanilla_debeRechazarUsuarioNoAutorizadoSinCrearRegistros() {
+        Usuario usuario = new Usuario();
+        usuario.setId(9L);
+        torneo.setEncargadoTorneo(usuarioDelegadoNoExiste());
+        when(usuarioDao.findById(9L)).thenReturn(Optional.of(usuario));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, usuario)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> equipoService.registrarPlanilla(10L, crearPlanilla("Equipo", "Delegada", "D-200", "Jugador", "J-200"), 9L));
+
+        verify(usuarioDao, never()).save(any(Usuario.class));
+        verify(equipoDao, never()).save(any(Equipo.class));
+    }
+
+    private Usuario usuarioDelegadoNoExiste() {
+        Usuario propietario = new Usuario();
+        propietario.setId(1L);
+        propietario.setTipoUsuario(TipoUsuario.ORGANIZADOR);
+        return propietario;
+    }
+
+    private DtoRegistroPlanilla crearPlanilla(String nombreEquipo, String nombreDelegado, String idDelegado,
+                                               String nombreJugador, String idJugador) {
+        DtoRegistroPlanilla planilla = new DtoRegistroPlanilla();
+        planilla.setNombreEquipo(nombreEquipo);
+        DtoRegistroPlanilla.Perfil delegadoPerfil = new DtoRegistroPlanilla.Perfil();
+        delegadoPerfil.setNombre(nombreDelegado);
+        delegadoPerfil.setIdentificacion(idDelegado);
+        planilla.setDelegado(delegadoPerfil);
+        DtoRegistroPlanilla.Perfil jugadorPerfil = new DtoRegistroPlanilla.Perfil();
+        jugadorPerfil.setNombre(nombreJugador);
+        jugadorPerfil.setIdentificacion(idJugador);
+        planilla.setJugadores(List.of(jugadorPerfil));
+        return planilla;
     }
 
     @Test
@@ -184,8 +274,8 @@ class EquipoServiceTest {
         segundaSolicitud.setDelegado(delegado);
         segundaSolicitud.setTorneo(segundoTorneo);
 
-        Equipo primera = equipoService.saveSolicitud(primeraSolicitud);
-        Equipo segunda = equipoService.saveSolicitud(segundaSolicitud);
+        Equipo primera = equipoService.saveSolicitud(primeraSolicitud, 5L);
+        Equipo segunda = equipoService.saveSolicitud(segundaSolicitud, 5L);
 
         assertEquals(77L, primera.getId());
         assertEquals(77L, segunda.getId());
@@ -214,7 +304,7 @@ class EquipoServiceTest {
             .thenReturn(Optional.of(new ParticipacionEquipoTorneo()));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> equipoService.saveSolicitud(solicitud));
+                () -> equipoService.saveSolicitud(solicitud, 5L));
 
         assertTrue(ex.getMessage().contains("solicitud"));
     }
@@ -230,6 +320,9 @@ class EquipoServiceTest {
         solicitud.setEquipo(equipo);
         solicitud.setTorneo(torneo);
         solicitud.setEstado("PENDIENTE");
+        Usuario organizador = new Usuario();
+        organizador.setId(8L);
+        torneo.setEncargadoTorneo(organizador);
 
         when(participacionEquipoDao.findById(35L)).thenReturn(Optional.of(solicitud));
         when(participacionEquipoDao.countByTorneoAndEstado(torneo, "ACEPTADO")).thenReturn(0L);
@@ -239,7 +332,7 @@ class EquipoServiceTest {
         when(usuarioDao.findByNumeroCelular(delegado.getNumeroCelular())).thenReturn(usuarioDelegado);
         when(notificacionDao.save(any(NotificacionUsuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Equipo resultado = equipoService.aceptarSolicitud(35L);
+        Equipo resultado = equipoService.aceptarSolicitud(35L, 8L);
 
         assertEquals(25L, resultado.getId());
         assertEquals("ACEPTADO", resultado.getParticipacionTorneo().getEstado());
@@ -302,7 +395,7 @@ class EquipoServiceTest {
         when(usuarioDao.findByNumeroCelular("3001234567")).thenReturn(usuario);
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> equipoService.saveSolicitud(solicitud));
+                () -> equipoService.saveSolicitud(solicitud, 5L));
 
         assertTrue(ex.getMessage().contains("ubicación"));
     }

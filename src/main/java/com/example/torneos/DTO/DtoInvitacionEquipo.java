@@ -11,19 +11,19 @@ public class DtoInvitacionEquipo {
     private String equipoNombre;
     private Long jugadorId;
     private String jugadorNombre;
-    private String jugadorCedula;
+    private String jugadorIdentificacion;
     private String estado;
     private LocalDateTime creadaEn;
 
     public DtoInvitacionEquipo(Long id, Long equipoId, String equipoNombre, Long jugadorId,
-                               String jugadorNombre, String jugadorCedula, String estado,
+                               String jugadorNombre, String jugadorIdentificacion, String estado,
                                LocalDateTime creadaEn) {
         this.id = id;
         this.equipoId = equipoId;
         this.equipoNombre = equipoNombre;
         this.jugadorId = jugadorId;
         this.jugadorNombre = jugadorNombre;
-        this.jugadorCedula = jugadorCedula;
+        this.jugadorIdentificacion = jugadorIdentificacion;
         this.estado = estado;
         this.creadaEn = creadaEn;
     }

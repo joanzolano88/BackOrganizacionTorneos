@@ -6,6 +6,7 @@ import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.PagoInscripcion;
+import com.example.torneos.entities.Usuario;
 import com.example.torneos.entities.ParticipacionEquipoTorneo;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.dao.ParticipacionEquipoTorneoDao;
@@ -29,17 +30,22 @@ public class PagoInscripcionService {
     @Autowired
     private TorneoDao torneoDao;
 
-    public List<PagoInscripcion> listarPorEquipo(long idEquipo, long idTorneo) {
+    public List<PagoInscripcion> listarPorEquipo(long idEquipo, long idTorneo, long usuarioId) {
         Equipo equipo = equipoDao.findById(idEquipo).orElse(null);
         if (equipo == null) {
             throw new IllegalArgumentException("El equipo no existe");
         }
         Torneo torneo = torneo(idTorneo);
         validarParticipacionAceptada(equipo, torneo);
+        Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("Debes iniciar sesión"));
+        boolean propietario = torneo.getEncargadoTorneo() != null && torneo.getEncargadoTorneo().getId() == usuarioId;
+        boolean delegado = equipo.getDelegado() != null && usuario.getNumeroCelular() != null &&
+                usuario.getNumeroCelular().equals(equipo.getDelegado().getNumeroCelular());
+        if (!propietario && !delegado) throw new IllegalArgumentException("No tienes permiso para consultar estos pagos");
         return pagoDao.findByEquipoAndTorneoOrderByFechaPagoDesc(equipo, torneo);
     }
 
-    public PagoInscripcion registrar(long idEquipo, long idTorneo, PagoInscripcion pago) {
+    public PagoInscripcion registrar(long idEquipo, long idTorneo, PagoInscripcion pago, long usuarioAutenticadoId) {
         Equipo equipo = equipoDao.findById(idEquipo).orElse(null);
         if (equipo == null) {
             throw new IllegalArgumentException("El equipo no existe");
@@ -49,9 +55,7 @@ public class PagoInscripcionService {
         if (pago == null || pago.getMonto() <= 0) {
             throw new IllegalArgumentException("El monto del pago no es válido");
         }
-        if (pago.getUsuarioId() == null || torneo.getEncargadoTorneo() == null ||
-            torneo.getEncargadoTorneo().getId() != pago.getUsuarioId() ||
-                !usuarioDao.existsById(pago.getUsuarioId())) {
+        if (torneo.getEncargadoTorneo() == null || torneo.getEncargadoTorneo().getId() != usuarioAutenticadoId) {
             throw new IllegalArgumentException("Solo el organizador del torneo puede registrar pagos");
         }
         long totalInscripcion = torneo.getValorInscripcion();
@@ -69,6 +73,7 @@ public class PagoInscripcionService {
         }
         pago.setEquipo(equipo);
         pago.setTorneo(torneo);
+        pago.setUsuarioId(usuarioAutenticadoId);
         PagoInscripcion guardado = pagoDao.save(pago);
         completarResumen(guardado, totalInscripcion, nuevoTotalPagado);
         return guardado;

@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Optional;
 
 public interface InvitacionEquipoDao extends JpaRepository<InvitacionEquipo, Long> {
-    @Query("select new com.example.torneos.DTO.DtoInvitacionEquipo(i.id, e.id, e.nombre, j.id, j.nombre, j.cedula, i.estado, i.creadaEn) " +
-            "from InvitacionEquipo i join i.equipo e join i.jugador j where j.cedula = :cedula and i.estado = :estado order by i.creadaEn desc")
-    List<DtoInvitacionEquipo> listarDtoPorCedulaYEstado(@Param("cedula") String cedula, @Param("estado") String estado);
+    @Query("select new com.example.torneos.DTO.DtoInvitacionEquipo(i.id, e.id, e.nombre, j.id, j.nombre, j.identificacion, i.estado, i.creadaEn) " +
+            "from InvitacionEquipo i join i.equipo e join i.jugador j where j.identificacion = :identificacion and i.estado = :estado order by i.creadaEn desc")
+    List<DtoInvitacionEquipo> listarDtoPorIdentificacionYEstado(@Param("identificacion") String identificacion, @Param("estado") String estado);
 
-    @Query("select new com.example.torneos.DTO.DtoInvitacionEquipo(i.id, e.id, e.nombre, j.id, j.nombre, j.cedula, i.estado, i.creadaEn) " +
+    @Query("select new com.example.torneos.DTO.DtoInvitacionEquipo(i.id, e.id, e.nombre, j.id, j.nombre, j.identificacion, i.estado, i.creadaEn) " +
             "from InvitacionEquipo i join i.equipo e join i.jugador j where i.id = :id")
     Optional<DtoInvitacionEquipo> buscarDto(@Param("id") long id);
 

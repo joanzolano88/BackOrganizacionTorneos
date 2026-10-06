@@ -23,6 +23,7 @@ import jakarta.annotation.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -83,8 +84,8 @@ public class UsuarioRest {
         Persona delegado = usuario.getNumeroCelular() == null ? null : usuarioService.buscarPersonaPorCelular(usuario.getNumeroCelular());
         List<Equipo> equiposDelegado = delegado == null ? List.of() : equipoDao.findByDelegado(delegado);
         respuesta.put("equiposDelegado", equiposDelegado);
-        if (usuario.getCedula() != null) {
-            jugadorDao.findByCedula(usuario.getCedula()).ifPresent(jugador -> {
+        if (usuario.getIdentificacion() != null) {
+            jugadorDao.findByIdentificacion(usuario.getIdentificacion()).ifPresent(jugador -> {
                 respuesta.put("jugador", jugador);
                 List<com.example.torneos.entities.ParticipacionJugadorTorneo> participaciones = participacionDao.findByJugador(jugador);
                 Map<Long, com.example.torneos.entities.Torneo> torneoPorEquipo = new HashMap<>();
@@ -143,8 +144,8 @@ public class UsuarioRest {
     }
 
     @PutMapping()
-    public Usuario update(@RequestBody Usuario usuario){
-        return usuarioService.update(usuario);
+    public Usuario update(@RequestBody Usuario usuario, @AuthenticationPrincipal Long usuarioId){
+        return usuarioService.update(usuario, usuarioId);
     }
 
     @DeleteMapping("/{id}")

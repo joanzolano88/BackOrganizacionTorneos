@@ -75,7 +75,7 @@ class PagoServiceTest {
         pago.setUsuarioId(2L);
         pago.setConcepto("Fecha 1");
 
-        DtoPago guardado = service.registrar(4L, pago);
+        DtoPago guardado = service.registrar(4L, pago, 2L);
 
         assertEquals(4L, guardado.getTorneoId());
         assertEquals(3L, guardado.getEquipoId());

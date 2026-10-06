@@ -3,6 +3,7 @@ package com.example.torneos.rest;
 import com.example.torneos.entities.PagoInscripcion;
 import com.example.torneos.services.PagoInscripcionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,12 +23,14 @@ public class PagoInscripcionRest {
     private PagoInscripcionService pagoService;
 
     @GetMapping("/equipo/{idEquipo}/torneo/{idTorneo}")
-    public List<PagoInscripcion> listar(@PathVariable long idEquipo, @PathVariable long idTorneo) {
-        return pagoService.listarPorEquipo(idEquipo, idTorneo);
+    public List<PagoInscripcion> listar(@PathVariable long idEquipo, @PathVariable long idTorneo,
+                                        @AuthenticationPrincipal Long usuarioId) {
+        return pagoService.listarPorEquipo(idEquipo, idTorneo, usuarioId);
     }
 
     @PostMapping("/equipo/{idEquipo}/torneo/{idTorneo}")
-    public PagoInscripcion registrar(@PathVariable long idEquipo, @PathVariable long idTorneo, @RequestBody PagoInscripcion pago) {
-        return pagoService.registrar(idEquipo, idTorneo, pago);
+    public PagoInscripcion registrar(@PathVariable long idEquipo, @PathVariable long idTorneo,
+                                     @RequestBody PagoInscripcion pago, @AuthenticationPrincipal Long usuarioId) {
+        return pagoService.registrar(idEquipo, idTorneo, pago, usuarioId);
     }
 }

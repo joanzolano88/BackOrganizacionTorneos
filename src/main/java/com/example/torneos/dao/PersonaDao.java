@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface PersonaDao extends JpaRepository<Persona, Long> {
+	java.util.Optional<Persona> findByIdentificacion(String identificacion);
 }
