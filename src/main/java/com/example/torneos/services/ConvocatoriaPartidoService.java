@@ -1,12 +1,12 @@
 package com.example.torneos.services;
 
+import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
 import com.example.torneos.dao.EventoPartidoDao;
 import com.example.torneos.dao.InvitacionPartidoDao;
 import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.dao.PartidoDao;
-import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.entities.ConvocatoriaPartido;
@@ -15,8 +15,6 @@ import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.Partido;
-import com.example.torneos.entities.Torneo;
-import com.example.torneos.entities.ParticipacionJugadorTorneo;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
@@ -40,7 +38,6 @@ public class ConvocatoriaPartidoService {
     @Autowired private EquipoDao equipoDao;
     @Autowired private UsuarioDao usuarioDao;
     @Autowired private AyudanteTorneoDao ayudanteTorneoDao;
-    @Autowired private TorneoDao torneoDao;
     @Autowired private EventoPartidoDao eventoDao;
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
     @Autowired private SancionJugadorTorneoService sancionService;
@@ -193,13 +190,91 @@ public class ConvocatoriaPartidoService {
         }
         Jugador jugador = jugadorDao.findById(jugadorId).orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
         if (convocatoriaDao.findByPartidoAndJugador(partido, jugador).isEmpty()) throw new IllegalArgumentException("El jugador no está convocado en este partido");
-        if (tipo != TipoEventoPartido.GOL && tipo != TipoEventoPartido.TARJETA_AMARILLA && tipo != TipoEventoPartido.TARJETA_ROJA) throw new IllegalArgumentException("El evento no es válido");
+        if (tipo != TipoEventoPartido.TARJETA_AMARILLA && tipo != TipoEventoPartido.TARJETA_ROJA) {
+            throw new IllegalArgumentException("Los goles y autogoles deben registrarse con los datos del equipo y del jugador");
+        }
         EventoPartido evento = guardarEvento(partido, jugador, tipo, minuto);
         sancionService.registrarTarjeta(evento);
         if (tipo == TipoEventoPartido.TARJETA_ROJA) {
             convocatoriaDao.findByPartidoAndJugador(partido, jugador).ifPresent(convocatoria -> { convocatoria.setExpulsado(true); convocatoriaDao.save(convocatoria); });
         }
         return evento;
+    }
+
+    @Transactional
+    public Partido registrarGol(long partidoId, DtoRegistrarGol solicitud, long usuarioId) {
+        Partido partido = partido(partidoId);
+        validarGestorOrganizador(partido, usuario(usuarioId));
+        if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Los goles solo se pueden registrar durante el partido");
+        }
+        if (solicitud.getMinuto() < 0) {
+            throw new IllegalArgumentException("El minuto del gol no puede ser negativo");
+        }
+
+        Equipo equipoAnotador = equipoParticipante(partido, solicitud.getEquipoAnotadorId());
+        Jugador jugador = jugadorConvocado(partido, solicitud.getJugadorId());
+        Equipo equipoJugador = jugador.getEquipo();
+        if (equipoJugador == null) {
+            throw new IllegalArgumentException("El jugador no pertenece a un equipo");
+        }
+
+        if (solicitud.isAutogol()) {
+            if (solicitud.getAsistenciaId() != null) {
+                throw new IllegalArgumentException("Un autogol no puede tener asistencia");
+            }
+            if (equipoJugador.getId() == equipoAnotador.getId()) {
+                throw new IllegalArgumentException("En un autogol, el jugador debe pertenecer al equipo contrario");
+            }
+            guardarEvento(partido, jugador, TipoEventoPartido.AUTOGOL, solicitud.getMinuto());
+        } else {
+            if (equipoJugador.getId() != equipoAnotador.getId()) {
+                throw new IllegalArgumentException("El autor del gol debe pertenecer al equipo que anota");
+            }
+            guardarEvento(partido, jugador, TipoEventoPartido.GOL, solicitud.getMinuto());
+            if (solicitud.getAsistenciaId() != null) {
+                Jugador asistente = jugadorConvocado(partido, solicitud.getAsistenciaId());
+                if (asistente.getEquipo() == null || asistente.getEquipo().getId() != equipoAnotador.getId()) {
+                    throw new IllegalArgumentException("La asistencia debe pertenecer al equipo que anota");
+                }
+                if (asistente.getId() == jugador.getId()) {
+                    throw new IllegalArgumentException("El autor del gol no puede asistirse a sí mismo");
+                }
+                guardarEvento(partido, asistente, TipoEventoPartido.ASISTENCIA, solicitud.getMinuto());
+            }
+        }
+
+        if (partido.getEquipoLocal() != null && equipoAnotador.getId() == partido.getEquipoLocal().getId()) {
+            partido.setAnotacionesEquipoLocal(partido.getAnotacionesEquipoLocal() + 1);
+        } else {
+            partido.setAnotacionesEquipoVisitante(partido.getAnotacionesEquipoVisitante() + 1);
+        }
+        return partidoDao.save(partido);
+    }
+
+    private Equipo equipoParticipante(Partido partido, Long equipoId) {
+        if (equipoId == null) {
+            throw new IllegalArgumentException("Selecciona el equipo al que se le suma el gol");
+        }
+        if (partido.getEquipoLocal() != null && partido.getEquipoLocal().getId() == equipoId) {
+            return partido.getEquipoLocal();
+        }
+        if (partido.getEquipoVisitante() != null && partido.getEquipoVisitante().getId() == equipoId) {
+            return partido.getEquipoVisitante();
+        }
+        throw new IllegalArgumentException("El equipo seleccionado no participa en este partido");
+    }
+
+    private Jugador jugadorConvocado(Partido partido, Long jugadorId) {
+        if (jugadorId == null) {
+            throw new IllegalArgumentException("Selecciona el jugador que realizó el gol");
+        }
+        Jugador jugador = jugadorDao.findById(jugadorId)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        if (convocatoriaDao.findByPartidoAndJugador(partido, jugador).isEmpty()) {
+            throw new IllegalArgumentException("El jugador no está convocado en este partido");
+        }
+        return jugador;
     }
 
     private void registrarEvento(Partido partido, Jugador jugador, TipoEventoPartido tipo) {

@@ -1,5 +1,6 @@
 package com.example.torneos.rest;
 
+import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -34,6 +35,13 @@ public class ConvocatoriaPartidoRest {
     @PostMapping("/{partidoId}/eventos")
     public EventoPartido registrarEvento(@PathVariable long partidoId, @RequestParam long jugadorId, @RequestParam TipoEventoPartido tipo, @RequestParam(defaultValue = "0") int minuto, @AuthenticationPrincipal Long usuarioId) {
         return service.registrarEvento(partidoId, jugadorId, tipo, minuto, usuarioId);
+    }
+
+    @PostMapping("/{partidoId}/goles")
+    public com.example.torneos.entities.Partido registrarGol(@PathVariable long partidoId,
+                                                             @RequestBody DtoRegistrarGol solicitud,
+                                                             @AuthenticationPrincipal Long usuarioId) {
+        return service.registrarGol(partidoId, solicitud, usuarioId);
     }
 
     @PostMapping("/{partidoId}/convocados")

@@ -5,5 +5,7 @@ public enum TipoEventoPartido {
     TARJETA_AMARILLA,
     TARJETA_ROJA,
     ENTRA_TITULAR,
-    SALE_TITULAR
+    SALE_TITULAR,
+    AUTOGOL,
+    ASISTENCIA
 }
