@@ -17,6 +17,9 @@ public class Torneo {
     @GeneratedValue
     private Long id;
     private String nombre;
+    @Lob
+    private byte[] logoTorneo;
+    private String logoTipoContenido;
     private String ubicacion;
     private int cantidadGrupos;
     private int cantidadEquipos;

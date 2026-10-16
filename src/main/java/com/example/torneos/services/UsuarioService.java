@@ -98,7 +98,9 @@ public class UsuarioService {
         Usuario usuarioDB = optUsuario.get();
         usuarioDB.setNombre(usuario.getNombre());
         usuarioDB.setCorreoElectronico(usuario.getCorreoElectronico());
-        usuarioDB.setFoto(usuario.getFoto());
+        if (usuario.getFoto() != null) {
+            usuarioDB.setFoto(usuario.getFoto());
+        }
         usuarioDB.setIdentificacion(usuario.getIdentificacion());
         usuarioDB.setNumeroCelular(usuario.getNumeroCelular());
         usuarioDB.setNumeroTelefono(usuario.getNumeroTelefono());

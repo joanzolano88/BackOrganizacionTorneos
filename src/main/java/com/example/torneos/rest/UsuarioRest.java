@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -143,7 +144,20 @@ public class UsuarioRest {
         notificacionDao.deleteByIdAndUsuario(idNotificacion, usuario);
     }
 
-    @PutMapping()
+    @PutMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Usuario updateWithPhoto(@RequestPart("objeto") String usuarioS,
+                                   @Nullable @RequestPart(value = "archivo", required = false) MultipartFile archivo,
+                                   @AuthenticationPrincipal Long usuarioId) throws IOException {
+        Usuario usuario = objectMapper.readValue(usuarioS, Usuario.class);
+        if (archivo != null && !archivo.isEmpty()) {
+            usuario.setFoto(archivo.getBytes());
+        } else {
+            usuario.setFoto(null);
+        }
+        return usuarioService.update(usuario, usuarioId);
+    }
+
+    @PutMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public Usuario update(@RequestBody Usuario usuario, @AuthenticationPrincipal Long usuarioId){
         return usuarioService.update(usuario, usuarioId);
     }

@@ -35,10 +35,14 @@ public class TorenoRest {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public Torneo save(@RequestPart("objeto") String torneoS, @AuthenticationPrincipal Long usuarioId) throws JsonMappingException, JsonProcessingException, IOException {
+    public Torneo save(@RequestPart("objeto") String torneoS,
+                       @RequestPart(value = "archivo", required = false) MultipartFile archivo,
+                       @AuthenticationPrincipal Long usuarioId) throws JsonMappingException, JsonProcessingException, IOException {
         Torneo torneo = objectMapper.readValue(torneoS, Torneo.class);
-        //Reglamento reglamento = new Reglamento();
-        //reglamento.setReglamento(file.getBytes());
+        if (archivo != null && !archivo.isEmpty()) {
+            torneo.setLogoTorneo(archivo.getBytes());
+            torneo.setLogoTipoContenido(archivo.getContentType());
+        }
         return torenoService.save(torneo, null, usuarioId);
     }
 
