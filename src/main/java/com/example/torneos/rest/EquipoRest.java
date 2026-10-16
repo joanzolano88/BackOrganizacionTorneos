@@ -2,6 +2,7 @@ package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoGrupoEquipo;
 import com.example.torneos.DTO.DtoRegistroPlanilla;
+import com.example.torneos.DTO.DtoParticipacionEquipoTorneo;
 import com.example.torneos.DTO.DtoResultadoRegistroPlanilla;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Jugador;
@@ -158,7 +159,7 @@ public class EquipoRest {
         return equipoService.getParticipacionesEquipo(idEquipo);
     }
     @GetMapping("/{idEquipo}/torneos")
-    public List<ParticipacionEquipoTorneo> torneosEquipo(@PathVariable long idEquipo) {
+    public List<DtoParticipacionEquipoTorneo> torneosEquipo(@PathVariable long idEquipo) {
         return equipoService.participacionesTorneosEquipo(idEquipo);
     }
     @GetMapping("/solicitudes/torneo/{id}")

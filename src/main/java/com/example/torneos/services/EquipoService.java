@@ -23,6 +23,7 @@ import com.example.torneos.entities.InvitacionEquipo;
 import com.example.torneos.dao.InvitacionEquipoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.DTO.DtoInvitacionEquipo;
+import com.example.torneos.DTO.DtoParticipacionEquipoTorneo;
 import com.example.torneos.DTO.DtoRegistroPlanilla;
 import com.example.torneos.DTO.DtoResultadoRegistroPlanilla;
 import com.example.torneos.enums.FaseActual;
@@ -587,14 +588,22 @@ public class EquipoService {
         return materializarLobsEquipo(adjuntarParticipacion(participacion));
     }
 
-    public List<ParticipacionEquipoTorneo> participacionesTorneosEquipo(long idEquipo) {
+    @Transactional
+    public List<DtoParticipacionEquipoTorneo> participacionesTorneosEquipo(long idEquipo) {
         Equipo equipo = equipo(idEquipo);
         List<ParticipacionEquipoTorneo> participaciones = new ArrayList<>(participacionEquipoDao.findByEquipo(equipo));
         if (equipo.getTorneo() != null) {
             obtenerOCrearParticipacionLegacy(equipo, equipo.getTorneo());
             participaciones = new ArrayList<>(participacionEquipoDao.findByEquipo(equipo));
         }
-        return participaciones;
+        return participaciones.stream()
+                .filter(participacion -> participacion.getTorneo() != null)
+                .map(participacion -> new DtoParticipacionEquipoTorneo(
+                        participacion.getId(),
+                        participacion.getEstado(),
+                        participacion.getTorneo().getId(),
+                        participacion.getTorneo().getNombre()))
+                .toList();
     }
 
     private ParticipacionEquipoTorneo obtenerOCrearParticipacionLegacy(Equipo equipo, Torneo torneo) {

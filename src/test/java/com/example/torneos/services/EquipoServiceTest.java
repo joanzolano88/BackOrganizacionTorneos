@@ -21,6 +21,7 @@ import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.DTO.DtoRegistroPlanilla;
 import com.example.torneos.DTO.DtoResultadoRegistroPlanilla;
+import com.example.torneos.DTO.DtoParticipacionEquipoTorneo;
 import com.example.torneos.enums.EstadoTorneo;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.TipoUsuario;
@@ -197,6 +198,27 @@ class EquipoServiceTest {
 
         verify(usuarioDao, never()).save(any(Usuario.class));
         verify(equipoDao, never()).save(any(Equipo.class));
+    }
+
+    @Test
+    void participacionesTorneosEquipo_debeDevolverSoloDatosNecesariosDelTorneo() {
+        Equipo equipo = new Equipo();
+        equipo.setId(52L);
+        ParticipacionEquipoTorneo participacion = new ParticipacionEquipoTorneo();
+        participacion.setId(20L);
+        participacion.setEquipo(equipo);
+        participacion.setTorneo(torneo);
+        participacion.setEstado("ACEPTADO");
+        when(equipoDao.findById(52L)).thenReturn(Optional.of(equipo));
+        when(participacionEquipoDao.findByEquipo(equipo)).thenReturn(List.of(participacion));
+
+        List<DtoParticipacionEquipoTorneo> resultado = equipoService.participacionesTorneosEquipo(52L);
+
+        assertEquals(1, resultado.size());
+        assertEquals(20L, resultado.get(0).getId());
+        assertEquals("ACEPTADO", resultado.get(0).getEstado());
+        assertEquals(10L, resultado.get(0).getTorneo().getId());
+        assertEquals("Copa Test", resultado.get(0).getTorneo().getNombre());
     }
 
     private Usuario usuarioDelegadoNoExiste() {
