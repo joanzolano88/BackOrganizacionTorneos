@@ -30,12 +30,13 @@ import java.util.List;
 public class TorenoRest {
     @Autowired
     private TorenoService torenoService;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public Torneo save(@RequestPart("objeto") String torneoS, @AuthenticationPrincipal Long usuarioId) throws JsonMappingException, JsonProcessingException, IOException {
-        ObjectMapper mapper = new ObjectMapper();
-        Torneo torneo = mapper.readValue(torneoS, Torneo.class);
+        Torneo torneo = objectMapper.readValue(torneoS, Torneo.class);
         //Reglamento reglamento = new Reglamento();
         //reglamento.setReglamento(file.getBytes());
         return torenoService.save(torneo, null, usuarioId);

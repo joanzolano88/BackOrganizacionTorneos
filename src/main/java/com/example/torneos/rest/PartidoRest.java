@@ -2,6 +2,7 @@ package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoResulatoLlave;
 import com.example.torneos.DTO.DtoPartidoResumen;
+import com.example.torneos.DTO.DtoProgramacionAutomatica;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.enums.EstadoPartido;
@@ -63,6 +64,18 @@ public class PartidoRest {
     @GetMapping("generar_partidos/{idTorneo}")
     public List<Partido> generarPartidos(@PathVariable long idTorneo, @AuthenticationPrincipal Long usuarioId){
         return partidoService.generarPartidos(idTorneo, usuarioId);
+    }
+    @PostMapping("programacion/automatica/{idTorneo}")
+    public List<Partido> programarAutomaticamente(@PathVariable long idTorneo,
+                                                 @RequestBody DtoProgramacionAutomatica solicitud,
+                                                 @AuthenticationPrincipal Long usuarioId) {
+        return partidoService.programarAutomaticaSemanal(idTorneo, solicitud, usuarioId);
+    }
+    @PostMapping("{idTorneo}/solicitud-extra")
+    public Partido solicitarPartidoExtra(@PathVariable long idTorneo,
+                                        @RequestBody Partido partido,
+                                        @AuthenticationPrincipal Long usuarioId) {
+        return partidoService.solicitarPartidoExtra(idTorneo, partido, usuarioId);
     }
     @PutMapping("asignar_fecha")
     public Partido asignarFecha(@RequestBody Partido partido, @AuthenticationPrincipal Long usuarioId) {

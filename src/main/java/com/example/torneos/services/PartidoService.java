@@ -5,6 +5,7 @@ import com.example.torneos.DTO.DtoPartidoResumen;
 import com.example.torneos.DTO.DtoDelegadoPartido;
 import com.example.torneos.DTO.DtoEquipoPartido;
 import com.example.torneos.DTO.DtoCanchaPartido;
+import com.example.torneos.DTO.DtoProgramacionAutomatica;
 import com.example.torneos.dao.CanchaDao;
 import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.TorneoDao;
@@ -13,6 +14,7 @@ import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.JugadorDao;
+import com.example.torneos.entities.Cancha;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Torneo;
@@ -31,13 +33,17 @@ import com.example.torneos.dao.ParticipacionEquipoTorneoDao;
 import com.example.torneos.entities.ParticipacionEquipoTorneo;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -465,6 +471,220 @@ public class PartidoService {
         }
         return resulatoLlaveList;
     }
+    public List<Partido> programarAutomaticaSemanal(long idTorneo, DtoProgramacionAutomatica solicitud, long usuarioId) {
+        if (solicitud == null) {
+            throw new IllegalArgumentException("La programación automática es obligatoria");
+        }
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        validarPropietarioTorneo(torneo, usuarioId);
+
+        List<Cancha> canchas = canchaDao.findByTorneo(torneo);
+        if (canchas.isEmpty()) {
+            throw new IllegalArgumentException("Debe haber al menos una cancha activa para programar automáticamente");
+        }
+
+        List<Partido> partidosPendientes = partidoDao.findByTorneoAndFaseEncuentro(torneo, torneo.getFaseTorneo()).stream()
+                .filter(partido -> partido.getFechaPartido() == null && partido.getEstadoPartido() == EstadoPartido.PENDIENTE)
+                .sorted(Comparator.comparingInt(partido ->
+                        partidosJugadosEquipo(partido.getEquipoLocal(), torneo) + partidosJugadosEquipo(partido.getEquipoVisitante(), torneo)))
+                .toList();
+
+        if (partidosPendientes.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        int partidosPorDia = Math.max(1, solicitud.getPartidosPorDia());
+        LocalDate fechaBase = solicitud.getFechaInicio() != null ? solicitud.getFechaInicio() : proximoMartes(LocalDate.now());
+        LocalTime horaInicio = solicitud.getHoraInicio() != null ? solicitud.getHoraInicio() : LocalTime.of(18, 0);
+        Set<Integer> diasSeleccionados = solicitud.getDiasSemana() == null || solicitud.getDiasSemana().isEmpty()
+                ? Set.of(2, 3, 4, 5, 6, 7, 1)
+                : new HashSet<>(solicitud.getDiasSemana());
+
+        List<LocalDate> fechas = new ArrayList<>();
+        LocalDate fechaInicioSemana = fechaBase.with(java.time.DayOfWeek.TUESDAY);
+        for (int i = 0; i < 7; i++) {
+            LocalDate fecha = fechaInicioSemana.plusDays(i);
+            int diaSemana = fecha.getDayOfWeek().getValue();
+            if (diasSeleccionados.contains(diaSemana)) {
+                fechas.add(fecha);
+            }
+        }
+
+        List<Partido> programados = new ArrayList<>();
+        Set<Long> equiposSemana = new HashSet<>();
+        for (LocalDate fecha : fechas) {
+            int partidosAsignadosHoy = 0;
+            for (Partido partido : partidosPendientes) {
+                if (programados.size() >= partidosPendientes.size()) {
+                    break;
+                }
+                if (programados.stream().anyMatch(programado -> programado.getId() == partido.getId())) {
+                    continue;
+                }
+                long localId = partido.getEquipoLocal() == null ? 0 : partido.getEquipoLocal().getId();
+                long visitanteId = partido.getEquipoVisitante() == null ? 0 : partido.getEquipoVisitante().getId();
+                if (equiposSemana.contains(localId) || equiposSemana.contains(visitanteId)) {
+                    continue;
+                }
+                LocalDateTime inicio = fecha.atTime(horaInicio.plusMinutes((long) partidosAsignadosHoy * (duracionTorneo(torneo) + 15L)));
+                Cancha cancha = seleccionarCanchaDisponible(torneo, inicio, canchas, partido, partido.getEquipoLocal(), partido.getEquipoVisitante());
+                if (cancha == null) {
+                    continue;
+                }
+                partido.setFechaPartido(inicio);
+                partido.setCancha(cancha);
+                partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
+                try {
+                    Partido guardado = asignarFecha(partido, usuarioId);
+                    programados.add(guardado);
+                    equiposSemana.add(localId);
+                    equiposSemana.add(visitanteId);
+                    partidosAsignadosHoy++;
+                    if (partidosAsignadosHoy >= partidosPorDia) {
+                        break;
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    continue;
+                }
+            }
+        }
+
+        return programados;
+    }
+
+    public Partido solicitarPartidoExtra(long idTorneo, Partido partido, long usuarioId) {
+        if (partido == null || partido.getEquipoLocal() == null || partido.getEquipoVisitante() == null) {
+            throw new IllegalArgumentException("El partido extra debe tener dos equipos");
+        }
+        Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        validarPropietarioTorneo(torneo, usuarioId);
+        if (partido.getEquipoLocal().getId() == partido.getEquipoVisitante().getId()) {
+            throw new IllegalArgumentException("Un equipo no puede enfrentarse a sí mismo");
+        }
+        if (partido.getFechaPartido() == null) {
+            throw new IllegalArgumentException("La fecha del partido extra es obligatoria");
+        }
+        Equipo local = partido.getEquipoLocal();
+        Equipo visitante = partido.getEquipoVisitante();
+        if (hayPartidoEnSemana(torneo, local, visitante, partido.getFechaPartido())) {
+            throw new IllegalArgumentException("Ya existe un partido del mismo torneo para esos equipos en esa semana");
+        }
+        if (tieneEquipoPartidoEnSemana(torneo, local, partido.getFechaPartido()) || tieneEquipoPartidoEnSemana(torneo, visitante, partido.getFechaPartido())) {
+            throw new IllegalArgumentException("Uno de los equipos ya tiene un partido programado en la misma semana del torneo");
+        }
+
+        Partido nuevo = new Partido();
+        nuevo.setTorneo(torneo);
+        nuevo.setEquipoLocal(local);
+        nuevo.setEquipoVisitante(visitante);
+        nuevo.setFaseEncuentro(torneo.getFaseTorneo());
+        nuevo.setGrupo(grupoEquipo(local, torneo));
+        nuevo.setEstadoPartido(EstadoPartido.PENDIENTE);
+        nuevo.setFechaPartido(partido.getFechaPartido());
+        nuevo.setCancha(partido.getCancha());
+        Partido guardado = partidoDao.save(nuevo);
+        notificarSolicitudExtra(guardado);
+        return guardado;
+    }
+
+    private int partidosJugadosEquipo(Equipo equipo, Torneo torneo) {
+        if (equipo == null) {
+            return 0;
+        }
+        return partidoDao.findByTorneo(torneo).stream()
+                .filter(partido -> partido.getEstadoPartido() != null && partido.getEstadoPartido() != EstadoPartido.PENDIENTE)
+                .filter(partido -> (partido.getEquipoLocal() != null && partido.getEquipoLocal().getId() == equipo.getId()) ||
+                        (partido.getEquipoVisitante() != null && partido.getEquipoVisitante().getId() == equipo.getId()))
+                .mapToInt(partido -> 1)
+                .sum();
+    }
+
+    private Cancha seleccionarCanchaDisponible(Torneo torneo, LocalDateTime inicio, List<Cancha> canchas, Partido partido, Equipo local, Equipo visitante) {
+        for (Cancha cancha : canchas) {
+            if (cancha == null) {
+                continue;
+            }
+            boolean ocupada = partidoDao.findAll().stream()
+                    .filter(otro -> otro.getId() != partido.getId())
+                    .filter(otro -> otro.getCancha() != null && otro.getCancha().getId() == cancha.getId())
+                    .filter(otro -> otro.getFechaPartido() != null)
+                    .filter(otro -> otro.getEstadoPartido() == EstadoPartido.PROGRAMADO || otro.getEstadoPartido() == EstadoPartido.EN_PROCESO)
+                    .anyMatch(otro -> {
+                        LocalDateTime inicioOtro = otro.getFechaPartido();
+                        LocalDateTime finOtro = inicioOtro.plusMinutes(duracionTorneo(otro.getTorneo()));
+                        return inicio.isBefore(finOtro) && inicioOtro.isBefore(inicio.plusMinutes(duracionTorneo(torneo)));
+                    });
+            if (!ocupada) {
+                return cancha;
+            }
+        }
+        return null;
+    }
+
+    private boolean hayPartidoEnSemana(Torneo torneo, Equipo local, Equipo visitante, LocalDateTime fechaPartido) {
+        LocalDate fecha = fechaPartido.toLocalDate();
+        LocalDate fechaInicio = fecha.with(java.time.DayOfWeek.TUESDAY);
+        LocalDate fechaFin = fechaInicio.plusDays(6);
+        return partidoDao.findByTorneo(torneo).stream()
+                .filter(partido -> partido.getFechaPartido() != null)
+                .filter(partido -> !partido.getFechaPartido().toLocalDate().isBefore(fechaInicio) && !partido.getFechaPartido().toLocalDate().isAfter(fechaFin))
+                .anyMatch(partido -> (partido.getEquipoLocal() != null && partido.getEquipoLocal().getId() == local.getId() &&
+                        partido.getEquipoVisitante() != null && partido.getEquipoVisitante().getId() == visitante.getId()) ||
+                        (partido.getEquipoLocal() != null && partido.getEquipoLocal().getId() == visitante.getId() &&
+                                partido.getEquipoVisitante() != null && partido.getEquipoVisitante().getId() == local.getId()));
+    }
+
+    private boolean tieneEquipoPartidoEnSemana(Torneo torneo, Equipo equipo, LocalDateTime fechaPartido) {
+        LocalDate fecha = fechaPartido.toLocalDate();
+        LocalDate fechaInicio = fecha.with(java.time.DayOfWeek.TUESDAY);
+        LocalDate fechaFin = fechaInicio.plusDays(6);
+        return partidoDao.findByTorneo(torneo).stream()
+                .filter(partido -> partido.getFechaPartido() != null)
+                .filter(partido -> !partido.getFechaPartido().toLocalDate().isBefore(fechaInicio) && !partido.getFechaPartido().toLocalDate().isAfter(fechaFin))
+                .anyMatch(partido -> (partido.getEquipoLocal() != null && partido.getEquipoLocal().getId() == equipo.getId()) ||
+                        (partido.getEquipoVisitante() != null && partido.getEquipoVisitante().getId() == equipo.getId()));
+    }
+
+    private int grupoEquipo(Equipo equipo, Torneo torneo) {
+        if (equipo == null || torneo == null) {
+            return 0;
+        }
+        return participacionEquipoDao.findByEquipoAndTorneo(equipo, torneo)
+                .map(ParticipacionEquipoTorneo::getGrupo)
+                .orElse(0);
+    }
+
+    private LocalDate proximoMartes(LocalDate fecha) {
+        LocalDate dia = fecha;
+        while (dia.getDayOfWeek().getValue() != 2) {
+            dia = dia.plusDays(1);
+        }
+        return dia;
+    }
+
+    private void notificarSolicitudExtra(Partido partido) {
+        for (Equipo equipo : List.of(partido.getEquipoLocal(), partido.getEquipoVisitante())) {
+            if (equipo == null || equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null) {
+                continue;
+            }
+            Usuario delegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+            if (delegado == null) {
+                continue;
+            }
+            NotificacionUsuario notificacion = new NotificacionUsuario();
+            notificacion.setUsuario(delegado);
+            notificacion.setTitulo("Verificación de partido extra");
+            notificacion.setMensaje("Se solicitó un partido extra entre " + partido.getEquipoLocal().getNombre() + " y " + partido.getEquipoVisitante().getNombre() + " para " + partido.getFechaPartido() + ". Debe validar la programación.");
+            notificacion.setRuta("/auth/partidos/partido/" + partido.getId());
+            notificacion.setTipo("ACCION");
+            notificacion.setReferenciaTipo("PARTIDO_EXTRA");
+            notificacion.setReferenciaId(partido.getId());
+            notificacion.setCreadaEn(LocalDateTime.now());
+            notificacion.setLeida(false);
+            notificacionDao.save(notificacion);
+        }
+    }
+
     public Partido update(Partido partido, long usuarioId) {
         Partido existente = partidoDao.findById(partido.getId()).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
         validarGestorPartido(existente, usuarioId);
