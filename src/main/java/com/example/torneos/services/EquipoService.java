@@ -267,6 +267,10 @@ public class EquipoService {
 
         String nombreEquipo = planilla.getNombreEquipo().trim();
         DtoRegistroPlanilla.Perfil delegadoPerfil = validarPerfilPlanilla(planilla.getDelegado());
+        if (delegadoPerfil.getNumeroCelular() == null || delegadoPerfil.getNumeroCelular().isBlank()) {
+            throw new IllegalArgumentException("El número de celular del delegado es obligatorio");
+        }
+        delegadoPerfil.setNumeroCelular(delegadoPerfil.getNumeroCelular().trim());
         List<DtoRegistroPlanilla.Perfil> perfilesJugadores = planilla.getJugadores().stream()
                 .map(this::validarPerfilPlanilla)
                 .toList();
@@ -302,14 +306,23 @@ public class EquipoService {
             }
         }
 
+        validarCelularDelegadoDisponible(delegadoPerfil);
+        validarCelularPersonaDisponible(delegadoPerfil);
         Usuario cuentaDelegado = crearOReutilizarPerfil(delegadoPerfil, TipoUsuario.DELEGADO);
+        if (!delegadoPerfil.getNumeroCelular().equals(cuentaDelegado.getNumeroCelular())) {
+            cuentaDelegado.setNumeroCelular(delegadoPerfil.getNumeroCelular());
+            cuentaDelegado = usuarioDao.save(cuentaDelegado);
+        }
+        Usuario cuentaDelegadoGuardada = cuentaDelegado;
         Persona delegado = personaDao.findByIdentificacion(delegadoPerfil.getIdentificacion())
                 .orElseGet(() -> {
                     Persona nueva = new Persona();
-                    nueva.setNombre(cuentaDelegado.getNombre());
-                    nueva.setIdentificacion(cuentaDelegado.getIdentificacion());
-                    return personaDao.save(nueva);
+                    nueva.setNombre(cuentaDelegadoGuardada.getNombre());
+                    nueva.setIdentificacion(cuentaDelegadoGuardada.getIdentificacion());
+                    return nueva;
                 });
+        delegado.setNumeroCelular(delegadoPerfil.getNumeroCelular());
+        delegado = personaDao.save(delegado);
 
         Equipo equipo = new Equipo();
         equipo.setNombre(nombreEquipo);
@@ -357,7 +370,24 @@ public class EquipoService {
         DtoRegistroPlanilla.Perfil limpio = new DtoRegistroPlanilla.Perfil();
         limpio.setNombre(perfil.getNombre().trim());
         limpio.setIdentificacion(perfil.getIdentificacion().trim());
+        limpio.setNumeroCelular(perfil.getNumeroCelular());
         return limpio;
+    }
+
+    private void validarCelularDelegadoDisponible(DtoRegistroPlanilla.Perfil perfil) {
+        Usuario usuarioConCelular = usuarioDao.findByNumeroCelular(perfil.getNumeroCelular());
+        if (usuarioConCelular != null &&
+                !perfil.getIdentificacion().equals(usuarioConCelular.getIdentificacion())) {
+            throw new IllegalArgumentException("El número de celular del delegado ya pertenece a otro usuario");
+        }
+    }
+
+    private void validarCelularPersonaDisponible(DtoRegistroPlanilla.Perfil perfil) {
+        personaDao.findByNumeroCelular(perfil.getNumeroCelular()).ifPresent(personaConCelular -> {
+            if (!perfil.getIdentificacion().equals(personaConCelular.getIdentificacion())) {
+                throw new IllegalArgumentException("El número de celular del delegado ya pertenece a otra persona");
+            }
+        });
     }
 
     private void validarPerfilDisponible(DtoRegistroPlanilla.Perfil perfil, TipoUsuario tipoUsuario) {
@@ -375,6 +405,7 @@ public class EquipoService {
         nuevo.setIdentificacion(perfil.getIdentificacion());
         nuevo.setContrasena(perfil.getIdentificacion());
         nuevo.setTipoUsuario(tipoUsuario);
+        nuevo.setNumeroCelular(perfil.getNumeroCelular());
         return usuarioDao.save(nuevo);
     }
 

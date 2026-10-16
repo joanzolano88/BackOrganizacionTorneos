@@ -150,6 +150,7 @@ class EquipoServiceTest {
         when(equipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
         when(participacionEquipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
         when(personaDao.findByIdentificacion("D-100")).thenReturn(Optional.empty());
+        when(personaDao.findByNumeroCelular("3001234567")).thenReturn(Optional.empty());
         when(jugadorDao.findByIdentificacion("J-100")).thenReturn(Optional.empty());
         when(equipoDao.save(any(Equipo.class))).thenAnswer(invocation -> {
             Equipo equipo = invocation.getArgument(0);
@@ -174,6 +175,11 @@ class EquipoServiceTest {
         assertTrue(cuentas.getAllValues().stream().allMatch(cuenta -> cuenta.getContrasena().equals(cuenta.getIdentificacion())));
         assertTrue(cuentas.getAllValues().stream().anyMatch(cuenta -> cuenta.getTipoUsuario() == TipoUsuario.DELEGADO));
         assertTrue(cuentas.getAllValues().stream().anyMatch(cuenta -> cuenta.getTipoUsuario() == TipoUsuario.JUGADOR));
+        assertTrue(cuentas.getAllValues().stream().anyMatch(cuenta ->
+                cuenta.getTipoUsuario() == TipoUsuario.DELEGADO && "3001234567".equals(cuenta.getNumeroCelular())));
+        org.mockito.ArgumentCaptor<Persona> personas = org.mockito.ArgumentCaptor.forClass(Persona.class);
+        verify(personaDao).save(personas.capture());
+        assertEquals("3001234567", personas.getValue().getNumeroCelular());
         verify(participacionEquipoDao).save(org.mockito.ArgumentMatchers.argThat(participacion -> "ACEPTADO".equals(participacion.getEstado())));
         verify(participacionDao).save(any(ParticipacionJugadorTorneo.class));
     }
@@ -207,6 +213,7 @@ class EquipoServiceTest {
         DtoRegistroPlanilla.Perfil delegadoPerfil = new DtoRegistroPlanilla.Perfil();
         delegadoPerfil.setNombre(nombreDelegado);
         delegadoPerfil.setIdentificacion(idDelegado);
+        delegadoPerfil.setNumeroCelular("3001234567");
         planilla.setDelegado(delegadoPerfil);
         DtoRegistroPlanilla.Perfil jugadorPerfil = new DtoRegistroPlanilla.Perfil();
         jugadorPerfil.setNombre(nombreJugador);

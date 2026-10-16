@@ -14,5 +14,6 @@ public class DtoRegistroPlanilla {
     public static class Perfil {
         private String nombre;
         private String identificacion;
+        private String numeroCelular;
     }
 }
