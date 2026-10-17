@@ -8,7 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 
@@ -34,7 +33,4 @@ public class ConvocatoriaPartido {
     private boolean expulsado;
     private int cambiosRealizados;
     private Integer numeroUniforme;
-
-    @Transient
-    private Equipo equipo;
 }

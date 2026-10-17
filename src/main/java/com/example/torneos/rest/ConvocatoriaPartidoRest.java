@@ -1,6 +1,7 @@
 package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
+import com.example.torneos.DTO.DtoConvocatoriaPartido;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -21,7 +22,7 @@ public class ConvocatoriaPartidoRest {
     @Autowired private com.example.torneos.services.SancionJugadorTorneoService sancionService;
 
     @GetMapping("/{partidoId}/convocados")
-    public List<ConvocatoriaPartido> listar(@PathVariable long partidoId) { return service.listar(partidoId); }
+    public List<DtoConvocatoriaPartido> listar(@PathVariable long partidoId) { return service.listar(partidoId); }
 
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
     public List<Jugador> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {

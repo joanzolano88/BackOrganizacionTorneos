@@ -183,9 +183,12 @@ class ConvocatoriaPartidoServiceTest {
         when(participacionDao.findByTorneo(partido.getTorneo()))
                 .thenReturn(List.of(participacion(jugadorLocal, local)));
 
-        List<ConvocatoriaPartido> convocatorias = service.listar(5L);
+        List<com.example.torneos.DTO.DtoConvocatoriaPartido> convocatorias = service.listar(5L);
 
-        assertEquals(local, convocatorias.get(0).getEquipo());
+        assertEquals(local.getId(), convocatorias.get(0).equipo().id());
+        assertEquals(jugadorLocal.getId(), convocatorias.get(0).jugador().id());
+        assertEquals(jugadorLocal.getNombre(), convocatorias.get(0).jugador().nombre());
+        assertEquals(local.getId(), convocatorias.get(0).jugador().equipo().id());
     }
 
     @Test

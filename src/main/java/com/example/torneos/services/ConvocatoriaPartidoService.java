@@ -1,6 +1,7 @@
 package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
+import com.example.torneos.DTO.DtoConvocatoriaPartido;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
 import com.example.torneos.dao.EventoPartidoDao;
@@ -46,18 +47,39 @@ public class ConvocatoriaPartidoService {
     @Autowired private SancionJugadorTorneoService sancionService;
 
     @Transactional(readOnly = true)
-    public List<ConvocatoriaPartido> listar(long partidoId) {
+    public List<DtoConvocatoriaPartido> listar(long partidoId) {
         Partido partido = partido(partidoId);
         Map<Long, Equipo> equipoPorJugador = new HashMap<>();
         participacionDao.findByTorneo(partido.getTorneo()).forEach(participacion ->
                 equipoPorJugador.put(participacion.getJugador().getId(), participacion.getEquipo()));
-        List<ConvocatoriaPartido> convocatorias = convocatoriaDao.findByPartido(partido);
-        convocatorias.forEach(convocatoria -> {
+        return convocatoriaDao.findByPartido(partido).stream()
+                .map(convocatoria -> {
             Jugador jugador = convocatoria.getJugador();
-            if (jugador == null) return;
-            convocatoria.setEquipo(equipoPorJugador.getOrDefault(jugador.getId(), jugador.getEquipo()));
-        });
-        return convocatorias;
+            Equipo equipo = jugador == null
+                    ? null
+                    : equipoPorJugador.getOrDefault(jugador.getId(), jugador.getEquipo());
+            DtoConvocatoriaPartido.DtoEquipoConvocatoria equipoDto = equipo == null
+                    ? null
+                    : new DtoConvocatoriaPartido.DtoEquipoConvocatoria(equipo.getId(), equipo.getNombre());
+            DtoConvocatoriaPartido.DtoJugadorConvocatoria jugadorDto = jugador == null
+                    ? null
+                    : new DtoConvocatoriaPartido.DtoJugadorConvocatoria(
+                            jugador.getId(),
+                            jugador.getNombre(),
+                            jugador.getIdentificacion(),
+                            jugador.getNumeroCamiseta(),
+                            equipoDto);
+            return new DtoConvocatoriaPartido(
+                    convocatoria.getId(),
+                    jugadorDto,
+                    equipoDto,
+                    convocatoria.isTitular(),
+                    convocatoria.isFueTitular(),
+                    convocatoria.isExpulsado(),
+                    convocatoria.getCambiosRealizados(),
+                    convocatoria.getNumeroUniforme());
+        })
+                .toList();
     }
 
     public List<Jugador> jugadoresDelEquipo(long partidoId, long equipoId) {
