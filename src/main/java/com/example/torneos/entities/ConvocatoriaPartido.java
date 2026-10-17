@@ -33,4 +33,5 @@ public class ConvocatoriaPartido {
     private boolean expulsado;
     private int cambiosRealizados;
     private Integer numeroUniforme;
+    private Integer posicionAlineacion;
 }

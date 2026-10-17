@@ -2,6 +2,7 @@ package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.DTO.DtoConvocatoriaPartido;
+import com.example.torneos.DTO.DtoFormacionPartido;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -23,6 +24,27 @@ public class ConvocatoriaPartidoRest {
 
     @GetMapping("/{partidoId}/convocados")
     public List<DtoConvocatoriaPartido> listar(@PathVariable long partidoId) { return service.listar(partidoId); }
+
+    @GetMapping("/{partidoId}/formaciones")
+    public List<DtoFormacionPartido> listarFormaciones(@PathVariable long partidoId) {
+        return service.listarFormaciones(partidoId);
+    }
+
+    @PutMapping("/{partidoId}/equipos/{equipoId}/formacion")
+    public DtoFormacionPartido cambiarFormacion(@PathVariable long partidoId,
+                                                @PathVariable long equipoId,
+                                                @RequestParam String formacion,
+                                                @AuthenticationPrincipal Long usuarioId) {
+        return service.cambiarFormacion(partidoId, equipoId, formacion, usuarioId);
+    }
+
+    @PostMapping("/{partidoId}/alineacion/intercambiar")
+    public void intercambiarPosiciones(@PathVariable long partidoId,
+                                       @RequestParam long convocatoriaId1,
+                                       @RequestParam long convocatoriaId2,
+                                       @AuthenticationPrincipal Long usuarioId) {
+        service.intercambiarPosiciones(partidoId, convocatoriaId1, convocatoriaId2, usuarioId);
+    }
 
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
     public List<Jugador> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {

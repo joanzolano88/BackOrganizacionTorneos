@@ -2,6 +2,8 @@ package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.DTO.DtoConvocatoriaPartido;
+import com.example.torneos.DTO.DtoFormacionPartido;
+import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
 import com.example.torneos.dao.EventoPartidoDao;
@@ -11,6 +13,7 @@ import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.entities.ConvocatoriaPartido;
+import com.example.torneos.entities.AlineacionEquipoPartido;
 import com.example.torneos.entities.EventoPartido;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.InvitacionPartido;
@@ -29,8 +32,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -45,6 +52,17 @@ public class ConvocatoriaPartidoService {
     @Autowired private EventoPartidoDao eventoDao;
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
     @Autowired private SancionJugadorTorneoService sancionService;
+    @Autowired private AlineacionEquipoPartidoDao alineacionDao;
+
+    private static final Map<String, List<Integer>> FORMACIONES = Map.of(
+            "4-4-2", List.of(1, 4, 4, 2),
+            "4-3-3", List.of(1, 4, 3, 3),
+            "3-5-2", List.of(1, 3, 5, 2),
+            "4-2-3-1", List.of(1, 4, 2, 3, 1),
+            "4-1-4-1", List.of(1, 4, 1, 4, 1),
+            "4-5-1", List.of(1, 4, 5, 1));
+
+    private static final String FORMACION_INICIAL = "4-4-2";
 
     @Transactional(readOnly = true)
     public List<DtoConvocatoriaPartido> listar(long partidoId) {
@@ -77,9 +95,92 @@ public class ConvocatoriaPartidoService {
                     convocatoria.isFueTitular(),
                     convocatoria.isExpulsado(),
                     convocatoria.getCambiosRealizados(),
-                    convocatoria.getNumeroUniforme());
+                    convocatoria.getNumeroUniforme(),
+                    convocatoria.getPosicionAlineacion());
         })
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DtoFormacionPartido> listarFormaciones(long partidoId) {
+        Partido partido = partido(partidoId);
+        Map<Long, String> formacionPorEquipo = new HashMap<>();
+        alineacionDao.findByPartido(partido).forEach(alineacion ->
+                formacionPorEquipo.put(alineacion.getEquipo().getId(), alineacion.getFormacion()));
+        return equiposDelPartido(partido).stream()
+                .map(equipo -> new DtoFormacionPartido(
+                        equipo.getId(),
+                        equipo.getNombre(),
+                        formacionPorEquipo.getOrDefault(equipo.getId(), FORMACION_INICIAL)))
+                .toList();
+    }
+
+    @Transactional
+    public DtoFormacionPartido cambiarFormacion(long partidoId, long equipoId, String formacion, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        validarEstadoProgramado(partido);
+        Equipo equipo = equipoDelPartido(partido, equipoId);
+        validarEquipoDelDelegado(partido, equipo, usuario);
+        List<Integer> lineas = FORMACIONES.get(formacion);
+        if (lineas == null) {
+            throw new IllegalArgumentException("La formación seleccionada no está disponible");
+        }
+        List<ConvocatoriaPartido> titulares = convocatoriasDelEquipo(partido, equipo).stream()
+                .filter(ConvocatoriaPartido::isTitular)
+                .sorted(Comparator.comparing(ConvocatoriaPartido::getPosicionAlineacion,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(ConvocatoriaPartido::getId))
+                .toList();
+        if (titulares.size() > lineas.stream().mapToInt(Integer::intValue).sum()) {
+            throw new IllegalArgumentException("La formación no tiene suficientes posiciones para todos los titulares");
+        }
+
+        AlineacionEquipoPartido alineacion = alineacionDao.findByPartidoAndEquipo(partido, equipo)
+                .orElseGet(() -> {
+                    AlineacionEquipoPartido nueva = new AlineacionEquipoPartido();
+                    nueva.setPartido(partido);
+                    nueva.setEquipo(equipo);
+                    return nueva;
+                });
+        alineacion.setFormacion(formacion);
+        alineacionDao.save(alineacion);
+        for (int index = 0; index < titulares.size(); index++) {
+            titulares.get(index).setPosicionAlineacion(index);
+            convocatoriaDao.save(titulares.get(index));
+        }
+        return new DtoFormacionPartido(equipo.getId(), equipo.getNombre(), formacion);
+    }
+
+    @Transactional
+    public void intercambiarPosiciones(long partidoId, long convocatoriaId1, long convocatoriaId2, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        validarEstadoProgramado(partido);
+        ConvocatoriaPartido primera = convocatoria(partidoId, convocatoriaId1);
+        ConvocatoriaPartido segunda = convocatoria(partidoId, convocatoriaId2);
+        if (!primera.isTitular() || !segunda.isTitular()) {
+            throw new IllegalArgumentException("Solo puedes intercambiar la posición de dos titulares");
+        }
+        Equipo equipoPrimero = equipoDeJugadorEnPartido(partido, primera.getJugador());
+        Equipo equipoSegundo = equipoDeJugadorEnPartido(partido, segunda.getJugador());
+        if (equipoPrimero == null || equipoSegundo == null ||
+                !Objects.equals(equipoPrimero.getId(), equipoSegundo.getId())) {
+            throw new IllegalArgumentException("Los titulares deben pertenecer al mismo equipo");
+        }
+        validarEquipoDelDelegado(partido, equipoPrimero, usuario);
+        int posicionPrimera = primera.getPosicionAlineacion() == null
+                ? indiceTitular(partido, primera)
+                : primera.getPosicionAlineacion();
+        int posicionSegunda = segunda.getPosicionAlineacion() == null
+                ? indiceTitular(partido, segunda)
+                : segunda.getPosicionAlineacion();
+        primera.setPosicionAlineacion(posicionSegunda);
+        segunda.setPosicionAlineacion(posicionPrimera);
+        convocatoriaDao.save(primera);
+        convocatoriaDao.save(segunda);
     }
 
     public List<Jugador> jugadoresDelEquipo(long partidoId, long equipoId) {
@@ -131,6 +232,9 @@ public class ConvocatoriaPartidoService {
         convocatoria.setJugador(jugador);
         convocatoria.setTitular(titular);
         convocatoria.setFueTitular(titular);
+        if (titular) {
+            convocatoria.setPosicionAlineacion(siguientePosicionAlineacion(partido, equipo));
+        }
         return convocatoriaDao.save(convocatoria);
     }
 
@@ -166,10 +270,17 @@ public class ConvocatoriaPartidoService {
             throw new IllegalArgumentException("Durante el partido debes registrar una sustitución seleccionando quién sale y quién entra");
         }
         if (titular && !convocatoria.isTitular()) {
-            validarMaxTitulares(convocatoria.getPartido(), convocatoria.getJugador().getEquipo());
+            validarMaxTitulares(convocatoria.getPartido(),
+                    equipoDeJugadorEnPartido(convocatoria.getPartido(), convocatoria.getJugador()));
         }
         convocatoria.setTitular(titular);
-        if (titular) convocatoria.setFueTitular(true);
+        if (titular) {
+            Equipo equipo = equipoDeJugadorEnPartido(convocatoria.getPartido(), convocatoria.getJugador());
+            convocatoria.setPosicionAlineacion(siguientePosicionAlineacion(convocatoria.getPartido(), equipo));
+            convocatoria.setFueTitular(true);
+        } else {
+            convocatoria.setPosicionAlineacion(null);
+        }
         registrarEvento(convocatoria.getPartido(), convocatoria.getJugador(), titular ? TipoEventoPartido.ENTRA_TITULAR : TipoEventoPartido.SALE_TITULAR);
         return convocatoriaDao.save(convocatoria);
     }
@@ -186,12 +297,14 @@ public class ConvocatoriaPartidoService {
                 .orElseThrow(() -> new IllegalArgumentException("El jugador suplente no existe en este partido"));
         if (sale.getPartido().getId() != partidoId || entra.getPartido().getId() != partidoId) throw new IllegalArgumentException("Los jugadores no pertenecen a este partido");
         if (!sale.isTitular() || entra.isTitular()) throw new IllegalArgumentException("Selecciona un titular que sale y un suplente que entra");
-        if (sale.getJugador().getEquipo().getId() != entra.getJugador().getEquipo().getId()) throw new IllegalArgumentException("Los jugadores deben pertenecer al mismo equipo");
+        Equipo equipoSale = equipoDeJugadorEnPartido(partido, sale.getJugador());
+        Equipo equipoEntra = equipoDeJugadorEnPartido(partido, entra.getJugador());
+        if (!Objects.equals(equipoSale.getId(), equipoEntra.getId())) throw new IllegalArgumentException("Los jugadores deben pertenecer al mismo equipo");
         if (eventoDao.existsByPartidoAndJugadorAndTipo(partido, sale.getJugador(), TipoEventoPartido.TARJETA_ROJA) || sale.isExpulsado()) throw new IllegalArgumentException("Un jugador expulsado no puede salir por cambio");
         if (eventoDao.existsByPartidoAndJugadorAndTipo(partido, entra.getJugador(), TipoEventoPartido.TARJETA_ROJA) || entra.isExpulsado()) throw new IllegalArgumentException("Un suplente expulsado no puede entrar");
         ModoCambioJugador modo = partido.getTorneo().getModoCambioJugador() == null ? ModoCambioJugador.LIMITADOS : partido.getTorneo().getModoCambioJugador();
         if (modo != ModoCambioJugador.SALIR_ENTRAR && entra.isFueTitular()) throw new IllegalArgumentException("Este suplente ya fue titular y no puede volver a entrar");
-        if (modo == ModoCambioJugador.LIMITADOS && partido.getTorneo().getMaximoCambios() > 0 && cambiosDelEquipo(partido, sale.getJugador().getEquipo()) >= partido.getTorneo().getMaximoCambios()) throw new IllegalArgumentException("Se alcanzó el límite de cambios del equipo");
+        if (modo == ModoCambioJugador.LIMITADOS && partido.getTorneo().getMaximoCambios() > 0 && cambiosDelEquipo(partido, equipoSale) >= partido.getTorneo().getMaximoCambios()) throw new IllegalArgumentException("Se alcanzó el límite de cambios del equipo");
         sale.setTitular(false);
         sale.setCambiosRealizados(sale.getCambiosRealizados() + 1);
         entra.setTitular(true);
@@ -204,8 +317,7 @@ public class ConvocatoriaPartidoService {
     }
 
     private long cambiosDelEquipo(Partido partido, Equipo equipo) {
-        return convocatoriaDao.findByPartido(partido).stream()
-                .filter(item -> item.getJugador().getEquipo() != null && item.getJugador().getEquipo().getId() == equipo.getId())
+        return convocatoriasDelEquipo(partido, equipo).stream()
                 .mapToLong(ConvocatoriaPartido::getCambiosRealizados).sum() / 2;
     }
 
@@ -217,6 +329,13 @@ public class ConvocatoriaPartidoService {
         validarEstadoEditable(convocatoria.getPartido());
         if (numero < 0 || numero > 99) {
             throw new IllegalArgumentException("El número de uniforme debe estar entre 0 y 99");
+        }
+        Equipo equipo = equipoDeJugadorEnPartido(convocatoria.getPartido(), convocatoria.getJugador());
+        boolean numeroEnUso = convocatoriasDelEquipo(convocatoria.getPartido(), equipo).stream()
+                .anyMatch(item -> !Objects.equals(item.getId(), convocatoriaId)
+                        && Objects.equals(item.getNumeroUniforme(), numero));
+        if (numeroEnUso) {
+            throw new IllegalArgumentException("El número de uniforme ya está asignado a otro jugador de este equipo en el partido");
         }
         convocatoria.setNumeroUniforme(numero);
         return convocatoriaDao.save(convocatoria);
@@ -345,7 +464,9 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         validarGestor(partido, usuario(usuarioId));
         for (Equipo equipo : equiposDelPartido(partido)) {
-            long titulares = convocatoriaDao.countByPartidoAndJugadorEquipoAndTitularTrue(partido, equipo);
+            long titulares = convocatoriasDelEquipo(partido, equipo).stream()
+                    .filter(ConvocatoriaPartido::isTitular)
+                    .count();
             int minimo = minimoTitulares(partido);
             int maximo = maximoTitulares(partido);
             if (titulares < minimo || titulares > maximo) {
@@ -426,7 +547,10 @@ public class ConvocatoriaPartidoService {
 
     private void validarMaxTitulares(Partido partido, Equipo equipo) {
         int maximo = maximoTitulares(partido);
-        if (convocatoriaDao.countByPartidoAndJugadorEquipoAndTitularTrue(partido, equipo) >= maximo) {
+        long titulares = convocatoriasDelEquipo(partido, equipo).stream()
+                .filter(ConvocatoriaPartido::isTitular)
+                .count();
+        if (titulares >= maximo) {
             throw new IllegalArgumentException("No se pueden registrar más de " + maximo + " titulares");
         }
     }
@@ -466,6 +590,68 @@ public class ConvocatoriaPartidoService {
             return;
         }
         throw new IllegalArgumentException("Solo el organizador o el delegado del equipo puede modificar la lista");
+    }
+
+    private void validarEstadoProgramado(Partido partido) {
+        if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO) {
+            throw new IllegalArgumentException("La alineación solo puede cambiarse cuando el partido está programado");
+        }
+    }
+
+    private Equipo equipoDelPartido(Partido partido, long equipoId) {
+        return equiposDelPartido(partido).stream()
+                .filter(equipo -> equipo.getId() == equipoId)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("El equipo no participa en este partido"));
+    }
+
+    private List<ConvocatoriaPartido> convocatoriasDelEquipo(Partido partido, Equipo equipo) {
+        return convocatoriaDao.findByPartido(partido).stream()
+                .filter(convocatoria -> convocatoria.getJugador() != null
+                        && Objects.equals(equipoDeJugadorEnPartido(partido, convocatoria.getJugador()).getId(), equipo.getId()))
+                .toList();
+    }
+
+    private int siguientePosicionAlineacion(Partido partido, Equipo equipo) {
+        Set<Integer> posicionesOcupadas = convocatoriasDelEquipo(partido, equipo).stream()
+                .filter(ConvocatoriaPartido::isTitular)
+                .map(ConvocatoriaPartido::getPosicionAlineacion)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        int totalPosiciones = FORMACIONES.get(FORMACION_INICIAL).stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        for (int posicion = 0; posicion < totalPosiciones; posicion++) {
+            if (!posicionesOcupadas.contains(posicion)) {
+                return posicion;
+            }
+        }
+        throw new IllegalArgumentException("No hay posiciones disponibles en la formación seleccionada");
+    }
+
+    private ConvocatoriaPartido convocatoria(long partidoId, long convocatoriaId) {
+        ConvocatoriaPartido convocatoria = convocatoriaDao.findById(convocatoriaId)
+                .orElseThrow(() -> new IllegalArgumentException("La convocatoria no existe"));
+        if (convocatoria.getPartido() == null || convocatoria.getPartido().getId() != partidoId) {
+            throw new IllegalArgumentException("La convocatoria no pertenece a este partido");
+        }
+        return convocatoria;
+    }
+
+    private int indiceTitular(Partido partido, ConvocatoriaPartido convocatoria) {
+        Equipo equipo = equipoDeJugadorEnPartido(partido, convocatoria.getJugador());
+        List<ConvocatoriaPartido> titulares = convocatoriasDelEquipo(partido, equipo).stream()
+                .filter(ConvocatoriaPartido::isTitular)
+                .sorted(Comparator.comparing(ConvocatoriaPartido::getPosicionAlineacion,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(ConvocatoriaPartido::getId))
+                .toList();
+        for (int index = 0; index < titulares.size(); index++) {
+            if (titulares.get(index).getId() != null && titulares.get(index).getId().equals(convocatoria.getId())) {
+                return index;
+            }
+        }
+        return 0;
     }
 
     private void validarGestorOrganizador(Partido partido, Usuario usuario) {

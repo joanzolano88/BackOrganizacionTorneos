@@ -8,7 +8,8 @@ public record DtoConvocatoriaPartido(
         boolean fueTitular,
         boolean expulsado,
         int cambiosRealizados,
-        Integer numeroUniforme) {
+        Integer numeroUniforme,
+        Integer posicionAlineacion) {
 
     public record DtoJugadorConvocatoria(
             Long id,

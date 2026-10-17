@@ -1,6 +1,7 @@
 package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
+import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EventoPartidoDao;
@@ -9,6 +10,7 @@ import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
 import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.entities.ConvocatoriaPartido;
+import com.example.torneos.entities.AlineacionEquipoPartido;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.EventoPartido;
 import com.example.torneos.entities.Jugador;
@@ -37,6 +39,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ConvocatoriaPartidoServiceTest {
@@ -48,6 +52,7 @@ class ConvocatoriaPartidoServiceTest {
     @Mock private EventoPartidoDao eventoDao;
     @Mock private ParticipacionJugadorTorneoDao participacionDao;
     @Mock private SancionJugadorTorneoService sancionService;
+    @Mock private AlineacionEquipoPartidoDao alineacionDao;
 
     @InjectMocks
     private ConvocatoriaPartidoService service;
@@ -89,7 +94,7 @@ class ConvocatoriaPartidoServiceTest {
         asistenteLocal.setId(101L);
         asistenteLocal.setEquipo(local);
 
-        when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
+        lenient().when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
     }
 
     @Test
@@ -210,6 +215,51 @@ class ConvocatoriaPartidoServiceTest {
         assertEquals(List.of(jugadorLocal), disponibles);
     }
 
+    @Test
+    void cambiarFormacion_persisteFormacionYAsignaPosicionesEnOrden() {
+        usuarioOrganizador();
+        partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
+        ConvocatoriaPartido primera = convocatoria(1L, jugadorLocal);
+        ConvocatoriaPartido segunda = convocatoria(2L, asistenteLocal);
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
+                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), asistenteLocal))
+                .thenReturn(Optional.of(participacion(asistenteLocal, local)));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(primera, segunda));
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(alineacionDao.findByPartidoAndEquipo(partido, local)).thenReturn(Optional.empty());
+        when(alineacionDao.save(any(AlineacionEquipoPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var alineacion = service.cambiarFormacion(5L, 10L, "4-3-3", 99L);
+
+        assertEquals("4-3-3", alineacion.formacion());
+        assertEquals(0, primera.getPosicionAlineacion());
+        assertEquals(1, segunda.getPosicionAlineacion());
+        verify(alineacionDao).save(any(AlineacionEquipoPartido.class));
+    }
+
+    @Test
+    void cambiarNumeroUniforme_rechazaNumeroYaUsadoPorOtroJugadorDelMismoEquipo() {
+        usuarioOrganizador();
+        partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
+        ConvocatoriaPartido convocatoria = convocatoria(1L, jugadorLocal);
+        ConvocatoriaPartido existente = convocatoria(2L, asistenteLocal);
+        existente.setNumeroUniforme(7);
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(convocatoria));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(convocatoria, existente));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
+                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), asistenteLocal))
+                .thenReturn(Optional.of(participacion(asistenteLocal, local)));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.cambiarNumeroUniforme(1L, 7, 99L));
+
+        verify(convocatoriaDao, never()).save(any(ConvocatoriaPartido.class));
+    }
+
     private ParticipacionJugadorTorneo participacion(Jugador jugador, Equipo equipo) {
         ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
         participacion.setTorneo(partido.getTorneo());
@@ -217,6 +267,15 @@ class ConvocatoriaPartidoServiceTest {
         participacion.setEquipo(equipo);
         participacion.setParticipando(true);
         return participacion;
+    }
+
+    private ConvocatoriaPartido convocatoria(long id, Jugador jugador) {
+        ConvocatoriaPartido convocatoria = new ConvocatoriaPartido();
+        convocatoria.setId(id);
+        convocatoria.setPartido(partido);
+        convocatoria.setJugador(jugador);
+        convocatoria.setTitular(true);
+        return convocatoria;
     }
 
     private void usuarioOrganizador() {
