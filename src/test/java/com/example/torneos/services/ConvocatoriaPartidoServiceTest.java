@@ -1,6 +1,7 @@
 package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
+import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
@@ -193,7 +194,7 @@ class ConvocatoriaPartidoServiceTest {
         assertEquals(local.getId(), convocatorias.get(0).equipo().id());
         assertEquals(jugadorLocal.getId(), convocatorias.get(0).jugador().id());
         assertEquals(jugadorLocal.getNombre(), convocatorias.get(0).jugador().nombre());
-        assertEquals(local.getId(), convocatorias.get(0).jugador().equipo().id());
+        assertEquals(local.getId(), convocatorias.get(0).equipo().id());
     }
 
     @Test
@@ -210,9 +211,11 @@ class ConvocatoriaPartidoServiceTest {
                 participacion(inactivo, local),
                 participacion(delEquipoRival, visitante)));
 
-        List<Jugador> disponibles = service.jugadoresDelEquipo(5L, 10L);
+        List<DtoJugadorDisponiblePartido> disponibles = service.jugadoresDelEquipo(5L, 10L);
 
-        assertEquals(List.of(jugadorLocal), disponibles);
+        assertEquals(1, disponibles.size());
+        assertEquals(jugadorLocal.getId(), disponibles.get(0).id());
+        assertEquals(jugadorLocal.getNombre(), disponibles.get(0).nombre());
     }
 
     @Test
@@ -258,6 +261,24 @@ class ConvocatoriaPartidoServiceTest {
                 () -> service.cambiarNumeroUniforme(1L, 7, 99L));
 
         verify(convocatoriaDao, never()).save(any(ConvocatoriaPartido.class));
+    }
+
+    @Test
+    void moverPosicionAlineacion_mueveTitularAUnaPosicionVacia() {
+        usuarioOrganizador();
+        partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
+        ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
+        titular.setPosicionAlineacion(0);
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(titular));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(titular));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
+                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
+        when(convocatoriaDao.save(titular)).thenReturn(titular);
+
+        service.moverPosicionAlineacion(5L, 1L, 2, 99L);
+
+        assertEquals(2, titular.getPosicionAlineacion());
+        verify(convocatoriaDao).save(titular);
     }
 
     private ParticipacionJugadorTorneo participacion(Jugador jugador, Equipo equipo) {

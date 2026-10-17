@@ -2,7 +2,10 @@ package com.example.torneos.rest;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.DTO.DtoConvocatoriaPartido;
+import com.example.torneos.DTO.DtoEventoPartido;
 import com.example.torneos.DTO.DtoFormacionPartido;
+import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
+import com.example.torneos.DTO.DtoSancionJugadorPartido;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -46,8 +49,16 @@ public class ConvocatoriaPartidoRest {
         service.intercambiarPosiciones(partidoId, convocatoriaId1, convocatoriaId2, usuarioId);
     }
 
+    @PutMapping("/{partidoId}/alineacion/mover-a-vacia")
+    public void moverAlineacionAVacia(@PathVariable long partidoId,
+                                      @RequestParam long convocatoriaId,
+                                      @RequestParam int posicion,
+                                      @AuthenticationPrincipal Long usuarioId) {
+        service.moverPosicionAlineacion(partidoId, convocatoriaId, posicion, usuarioId);
+    }
+
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
-    public List<Jugador> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {
+    public List<DtoJugadorDisponiblePartido> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {
         return service.jugadoresDelEquipo(partidoId, equipoId);
     }
 
@@ -55,7 +66,39 @@ public class ConvocatoriaPartidoRest {
     public Jugador buscar(@PathVariable long partidoId, @PathVariable String identificacion, @AuthenticationPrincipal Long usuarioId) { return service.buscarPorIdentificacion(partidoId, identificacion, usuarioId); }
 
     @GetMapping("/{partidoId}/eventos")
-    public List<EventoPartido> eventos(@PathVariable long partidoId) { return service.eventos(partidoId); }
+    public List<DtoEventoPartido> eventos(@PathVariable long partidoId) {
+        return service.eventos(partidoId).stream()
+                .map(evento -> new DtoEventoPartido(
+                        evento.getId(),
+                        evento.getTipo(),
+                        evento.getMinuto(),
+                        evento.getJugador().getId()))
+                .toList();
+    }
+
+    @GetMapping("/{partidoId}/sanciones")
+    public List<DtoSancionJugadorPartido> sancionesDelPartido(@PathVariable long partidoId) {
+        return service.sancionesActivasDelPartido(partidoId);
+    }
+
+    @GetMapping("/torneo/{torneoId}/sanciones")
+    public List<DtoSancionJugadorPartido> sanciones(@PathVariable long torneoId) {
+        return sancionService.listarTorneo(torneoId).stream()
+                .map(this::dtoSancion)
+                .toList();
+    }
+
+    private DtoSancionJugadorPartido dtoSancion(com.example.torneos.entities.SancionJugadorTorneo sancion) {
+        return new DtoSancionJugadorPartido(
+                sancion.getId(),
+                sancion.getJugador() == null ? null : new DtoSancionJugadorPartido.DtoJugador(
+                        sancion.getJugador().getId(),
+                        sancion.getJugador().getNombre()),
+                sancion.isActiva(),
+                sancion.getPartidosPendientes(),
+                sancion.isPermanente(),
+                sancion.getExencionPartidoId());
+    }
 
     @PostMapping("/{partidoId}/eventos")
     public EventoPartido registrarEvento(@PathVariable long partidoId, @RequestParam long jugadorId, @RequestParam TipoEventoPartido tipo, @RequestParam(defaultValue = "0") int minuto, @AuthenticationPrincipal Long usuarioId) {
@@ -107,11 +150,6 @@ public class ConvocatoriaPartidoRest {
 
     @PostMapping("/invitacion/{token}/aceptar")
     public ConvocatoriaPartido aceptar(@PathVariable String token, @AuthenticationPrincipal Long usuarioId) { return service.aceptarInvitacion(token, usuarioId); }
-
-    @GetMapping("/torneo/{torneoId}/sanciones")
-    public List<com.example.torneos.entities.SancionJugadorTorneo> sanciones(@PathVariable long torneoId) {
-        return sancionService.listarTorneo(torneoId);
-    }
 
     @PutMapping("/{partidoId}/sanciones/{jugadorId}/levantar")
     public com.example.torneos.entities.SancionJugadorTorneo levantarSancion(@PathVariable long partidoId, @PathVariable long jugadorId, @AuthenticationPrincipal Long usuarioId) {

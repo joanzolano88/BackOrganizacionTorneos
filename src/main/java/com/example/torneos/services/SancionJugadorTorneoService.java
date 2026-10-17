@@ -145,6 +145,10 @@ public class SancionJugadorTorneoService {
         return listarTorneo(torneo);
     }
 
+    public List<SancionJugadorTorneo> listarActivasDelEquipo(Torneo torneo, Equipo equipo) {
+        return sancionDao.findByTorneoAndEquipoAndActivaTrue(torneo, equipo);
+    }
+
     private void notificarDelegados(Partido partido, String mensaje) {
         for (Equipo equipo : Stream.of(partido.getEquipoLocal(), partido.getEquipoVisitante()).filter(java.util.Objects::nonNull).toList()) {
             if (equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null) continue;

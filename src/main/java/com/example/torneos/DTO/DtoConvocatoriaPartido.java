@@ -5,9 +5,6 @@ public record DtoConvocatoriaPartido(
         DtoJugadorConvocatoria jugador,
         DtoEquipoConvocatoria equipo,
         boolean titular,
-        boolean fueTitular,
-        boolean expulsado,
-        int cambiosRealizados,
         Integer numeroUniforme,
         Integer posicionAlineacion) {
 
@@ -15,8 +12,7 @@ public record DtoConvocatoriaPartido(
             Long id,
             String nombre,
             String identificacion,
-            int numeroCamiseta,
-            DtoEquipoConvocatoria equipo) {}
+            int numeroCamiseta) {}
 
     public record DtoEquipoConvocatoria(Long id, String nombre) {}
 }

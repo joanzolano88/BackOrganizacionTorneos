@@ -3,6 +3,8 @@ package com.example.torneos.services;
 import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.DTO.DtoConvocatoriaPartido;
 import com.example.torneos.DTO.DtoFormacionPartido;
+import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
+import com.example.torneos.DTO.DtoSancionJugadorPartido;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
@@ -32,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -85,16 +86,12 @@ public class ConvocatoriaPartidoService {
                             jugador.getId(),
                             jugador.getNombre(),
                             jugador.getIdentificacion(),
-                            jugador.getNumeroCamiseta(),
-                            equipoDto);
+                            jugador.getNumeroCamiseta());
             return new DtoConvocatoriaPartido(
                     convocatoria.getId(),
                     jugadorDto,
                     equipoDto,
                     convocatoria.isTitular(),
-                    convocatoria.isFueTitular(),
-                    convocatoria.isExpulsado(),
-                    convocatoria.getCambiosRealizados(),
                     convocatoria.getNumeroUniforme(),
                     convocatoria.getPosicionAlineacion());
         })
@@ -183,7 +180,38 @@ public class ConvocatoriaPartidoService {
         convocatoriaDao.save(segunda);
     }
 
-    public List<Jugador> jugadoresDelEquipo(long partidoId, long equipoId) {
+    @Transactional
+    public void moverPosicionAlineacion(long partidoId, long convocatoriaId, int posicion, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        validarEstadoProgramado(partido);
+        ConvocatoriaPartido convocatoria = convocatoria(partidoId, convocatoriaId);
+        if (!convocatoria.isTitular()) {
+            throw new IllegalArgumentException("Solo puedes mover a una posición vacía a un titular");
+        }
+        Equipo equipo = equipoDeJugadorEnPartido(partido, convocatoria.getJugador());
+        validarEquipoDelDelegado(partido, equipo, usuario);
+        String formacion = alineacionDao.findByPartidoAndEquipo(partido, equipo)
+                .map(AlineacionEquipoPartido::getFormacion)
+                .orElse(FORMACION_INICIAL);
+        List<Integer> lineas = FORMACIONES.get(formacion);
+        int posicionesTotales = lineas.stream().mapToInt(Integer::intValue).sum();
+        if (posicion < 0 || posicion >= posicionesTotales) {
+            throw new IllegalArgumentException("La posición seleccionada no pertenece a la formación");
+        }
+        boolean ocupada = convocatoriasDelEquipo(partido, equipo).stream()
+                .anyMatch(item -> item.isTitular()
+                        && !Objects.equals(item.getId(), convocatoriaId)
+                        && Objects.equals(item.getPosicionAlineacion(), posicion));
+        if (ocupada) {
+            throw new IllegalArgumentException("La posición seleccionada ya está ocupada");
+        }
+        convocatoria.setPosicionAlineacion(posicion);
+        convocatoriaDao.save(convocatoria);
+    }
+
+    public List<DtoJugadorDisponiblePartido> jugadoresDelEquipo(long partidoId, long equipoId) {
         Partido partido = partido(partidoId);
         Equipo equipo = equiposDelPartido(partido).stream()
                 .filter(item -> item.getId() == equipoId)
@@ -193,6 +221,28 @@ public class ConvocatoriaPartidoService {
                 .filter(participacion -> participacion.getEquipo().getId() == equipo.getId())
                 .map(participacion -> participacion.getJugador())
                 .filter(jugador -> jugador.getEstadoJugador() == null || jugador.getEstadoJugador() == EstadoJugador.ACTIVO)
+                .map(jugador -> new DtoJugadorDisponiblePartido(
+                        jugador.getId(),
+                        jugador.getNombre(),
+                        jugador.getIdentificacion(),
+                        jugador.getNumeroCamiseta()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DtoSancionJugadorPartido> sancionesActivasDelPartido(long partidoId) {
+        Partido partido = partido(partidoId);
+        return equiposDelPartido(partido).stream()
+                .flatMap(equipo -> sancionService.listarActivasDelEquipo(partido.getTorneo(), equipo).stream())
+                .map(sancion -> new DtoSancionJugadorPartido(
+                        sancion.getId(),
+                        sancion.getJugador() == null ? null : new DtoSancionJugadorPartido.DtoJugador(
+                                sancion.getJugador().getId(),
+                                sancion.getJugador().getNombre()),
+                        sancion.isActiva(),
+                        sancion.getPartidosPendientes(),
+                        sancion.isPermanente(),
+                        sancion.getExencionPartidoId()))
                 .toList();
     }
 
