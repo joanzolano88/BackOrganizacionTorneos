@@ -132,6 +132,14 @@ public class ConvocatoriaPartidoRest {
         service.sustituir(partidoId, titularId, suplenteId, usuarioId);
     }
 
+    @PostMapping("/{partidoId}/sustituciones/jugador-inscrito")
+    public void sustituirJugadorInscrito(@PathVariable long partidoId,
+                                         @RequestParam long titularId,
+                                         @RequestParam long jugadorId,
+                                         @AuthenticationPrincipal Long usuarioId) {
+        service.sustituirJugadorInscrito(partidoId, titularId, jugadorId, usuarioId);
+    }
+
     @PutMapping("/convocados/{convocatoriaId}/numero")
     public ConvocatoriaPartido numero(@PathVariable long convocatoriaId, @RequestParam int numero, @AuthenticationPrincipal Long usuarioId) {
         return service.cambiarNumeroUniforme(convocatoriaId, numero, usuarioId);

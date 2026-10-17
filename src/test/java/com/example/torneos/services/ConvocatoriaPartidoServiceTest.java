@@ -179,6 +179,37 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void sustituirJugadorInscrito_agregaAlPartidoJugadorInscritoQueAunNoTeniaConvocatoria() {
+        usuarioOrganizador();
+        ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
+        Jugador suplenteInscrito = new Jugador();
+        suplenteInscrito.setId(102L);
+        suplenteInscrito.setEquipo(local);
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(titular));
+        when(jugadorDao.findById(102L)).thenReturn(Optional.of(suplenteInscrito));
+        when(convocatoriaDao.findByPartidoAndJugador(partido, suplenteInscrito)).thenReturn(Optional.empty());
+        when(convocatoriaDao.countByPartidoAndJugadorEquipo(partido, local)).thenReturn(5L);
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
+                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), suplenteInscrito))
+                .thenReturn(Optional.of(participacion(suplenteInscrito, local)));
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventoDao.save(any(EventoPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.sustituirJugadorInscrito(5L, 1L, 102L, 99L);
+
+        ArgumentCaptor<ConvocatoriaPartido> convocatorias = ArgumentCaptor.forClass(ConvocatoriaPartido.class);
+        verify(convocatoriaDao, times(3)).save(convocatorias.capture());
+        ConvocatoriaPartido suplenteAgregado = convocatorias.getAllValues().get(0);
+        assertEquals(suplenteInscrito, suplenteAgregado.getJugador());
+        assertTrue(suplenteAgregado.isTitular());
+        assertTrue(suplenteAgregado.isFueTitular());
+        assertTrue(!titular.isTitular());
+    }
+
+    @Test
     void listar_usaElEquipoDeLaInscripcionDelTorneoParaClasificarLaConvocatoria() {
         jugadorLocal.setEquipo(visitante);
         ConvocatoriaPartido convocatoria = new ConvocatoriaPartido();

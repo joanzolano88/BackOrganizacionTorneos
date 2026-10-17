@@ -343,7 +343,46 @@ public class ConvocatoriaPartidoService {
                 .orElseThrow(() -> new IllegalArgumentException("El jugador titular no existe en este partido"));
         ConvocatoriaPartido entra = convocatoriaDao.findById(suplenteId)
                 .orElseThrow(() -> new IllegalArgumentException("El jugador suplente no existe en este partido"));
-        if (sale.getPartido().getId() != partidoId || entra.getPartido().getId() != partidoId) throw new IllegalArgumentException("Los jugadores no pertenecen a este partido");
+        sustituirConvocados(partido, sale, entra);
+    }
+
+    @Transactional
+    public void sustituirJugadorInscrito(long partidoId, long titularId, long jugadorId, long usuarioId) {
+        Partido partido = partido(partidoId);
+        validarGestorOrganizador(partido, usuario(usuarioId));
+        validarEstadoEditable(partido);
+        ConvocatoriaPartido sale = convocatoriaDao.findById(titularId)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador titular no existe en este partido"));
+        if (sale.getPartido().getId() != partidoId || !sale.isTitular()) {
+            throw new IllegalArgumentException("Selecciona un titular de este partido");
+        }
+
+        Jugador jugador = jugadorDao.findById(jugadorId)
+                .orElseThrow(() -> new IllegalArgumentException("El suplente no existe"));
+        sancionService.validarElegibilidad(partido, jugador);
+        Equipo equipoSale = equipoDeJugadorEnPartido(partido, sale.getJugador());
+        Equipo equipoEntra = equipoDeJugadorEnPartido(partido, jugador);
+        if (!Objects.equals(equipoSale.getId(), equipoEntra.getId())) {
+            throw new IllegalArgumentException("Los jugadores deben pertenecer al mismo equipo");
+        }
+
+        ConvocatoriaPartido entra = convocatoriaDao.findByPartidoAndJugador(partido, jugador).orElse(null);
+        if (entra == null) {
+            if (convocatoriaDao.countByPartidoAndJugadorEquipo(partido, equipoEntra) >= maximoConvocados(partido)) {
+                throw new IllegalArgumentException("Se alcanzó el máximo de jugadores convocados para " + equipoEntra.getNombre());
+            }
+            entra = new ConvocatoriaPartido();
+            entra.setPartido(partido);
+            entra.setJugador(jugador);
+            entra = convocatoriaDao.save(entra);
+        }
+        sustituirConvocados(partido, sale, entra);
+    }
+
+    private void sustituirConvocados(Partido partido, ConvocatoriaPartido sale, ConvocatoriaPartido entra) {
+        if (sale.getPartido().getId() != partido.getId() || entra.getPartido().getId() != partido.getId()) {
+            throw new IllegalArgumentException("Los jugadores no pertenecen a este partido");
+        }
         if (!sale.isTitular() || entra.isTitular()) throw new IllegalArgumentException("Selecciona un titular que sale y un suplente que entra");
         Equipo equipoSale = equipoDeJugadorEnPartido(partido, sale.getJugador());
         Equipo equipoEntra = equipoDeJugadorEnPartido(partido, entra.getJugador());
