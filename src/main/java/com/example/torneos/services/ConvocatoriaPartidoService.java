@@ -117,7 +117,7 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        validarEstadoProgramado(partido);
+        validarEstadoEditable(partido);
         Equipo equipo = equipoDelPartido(partido, equipoId);
         validarEquipoDelDelegado(partido, equipo, usuario);
         List<Integer> lineas = FORMACIONES.get(formacion);
@@ -155,7 +155,7 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        validarEstadoProgramado(partido);
+        validarEstadoEditable(partido);
         ConvocatoriaPartido primera = convocatoria(partidoId, convocatoriaId1);
         ConvocatoriaPartido segunda = convocatoria(partidoId, convocatoriaId2);
         if (!primera.isTitular() || !segunda.isTitular()) {
@@ -185,7 +185,7 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        validarEstadoProgramado(partido);
+        validarEstadoEditable(partido);
         ConvocatoriaPartido convocatoria = convocatoria(partidoId, convocatoriaId);
         if (!convocatoria.isTitular()) {
             throw new IllegalArgumentException("Solo puedes mover a una posición vacía a un titular");
@@ -210,12 +210,16 @@ public class ConvocatoriaPartidoService {
     }
 
     @Transactional
-    public ConvocatoriaPartido agregarEnPosicionVacia(long partidoId, long jugadorId, int posicion, long usuarioId) {
+    public ConvocatoriaPartido agregarEnPosicionVacia(
+            long partidoId, long jugadorId, int posicion, int numeroUniforme, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Esta acción solo está disponible durante el partido");
+        }
+        if (numeroUniforme < 0 || numeroUniforme > 99) {
+            throw new IllegalArgumentException("El número de uniforme debe estar entre 0 y 99");
         }
 
         Jugador jugador = jugadorDao.findById(jugadorId)
@@ -248,6 +252,13 @@ public class ConvocatoriaPartidoService {
                 partido.getTorneo().getModoCambioJugador() != ModoCambioJugador.SALIR_ENTRAR) {
             throw new IllegalArgumentException("Este jugador ya salió del partido y no puede volver a entrar");
         }
+        Long convocatoriaIdExenta = convocatoria == null ? null : convocatoria.getId();
+        boolean numeroEnUso = convocatoriasDelEquipo(partido, equipo).stream()
+                .anyMatch(item -> !Objects.equals(item.getId(), convocatoriaIdExenta)
+                        && Objects.equals(item.getNumeroUniforme(), numeroUniforme));
+        if (numeroEnUso) {
+            throw new IllegalArgumentException("El número de uniforme ya está asignado a otro jugador de este equipo en el partido");
+        }
         validarMaxTitulares(partido, equipo);
         if (convocatoria == null) {
             convocatoria = new ConvocatoriaPartido();
@@ -257,6 +268,7 @@ public class ConvocatoriaPartidoService {
         convocatoria.setTitular(true);
         convocatoria.setFueTitular(true);
         convocatoria.setPosicionAlineacion(posicion);
+        convocatoria.setNumeroUniforme(numeroUniforme);
         ConvocatoriaPartido guardada = convocatoriaDao.save(convocatoria);
         registrarEvento(partido, jugador, TipoEventoPartido.ENTRA_TITULAR);
         return guardada;
@@ -308,7 +320,8 @@ public class ConvocatoriaPartidoService {
     }
 
     @Transactional
-    public ConvocatoriaPartido agregar(long partidoId, long jugadorId, boolean titular, long usuarioId) {
+    public ConvocatoriaPartido agregar(
+            long partidoId, long jugadorId, boolean titular, Integer numeroUniforme, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
@@ -334,6 +347,10 @@ public class ConvocatoriaPartidoService {
         ConvocatoriaPartido convocatoria = new ConvocatoriaPartido();
         convocatoria.setPartido(partido);
         convocatoria.setJugador(jugador);
+        if (titular) {
+            validarNumeroUniforme(partido, equipo, convocatoria, numeroUniforme == null ? -1 : numeroUniforme);
+            convocatoria.setNumeroUniforme(numeroUniforme);
+        }
         convocatoria.setTitular(titular);
         convocatoria.setFueTitular(titular);
         if (titular) {
@@ -343,7 +360,8 @@ public class ConvocatoriaPartidoService {
     }
 
     @Transactional
-    public ConvocatoriaPartido agregarPorIdentificacion(long partidoId, String identificacion, boolean titular, long usuarioId) {
+    public ConvocatoriaPartido agregarPorIdentificacion(
+            long partidoId, String identificacion, boolean titular, Integer numeroUniforme, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
@@ -364,11 +382,12 @@ public class ConvocatoriaPartidoService {
             jugador.setEquipo(equipo);
             jugador = jugadorDao.save(jugador);
         }
-        return agregar(partidoId, jugador.getId(), titular, usuarioId);
+        return agregar(partidoId, jugador.getId(), titular, numeroUniforme, usuarioId);
     }
 
     @Transactional
-    public ConvocatoriaPartido cambiarTitular(long convocatoriaId, boolean titular, long usuarioId) {
+    public ConvocatoriaPartido cambiarTitular(
+            long convocatoriaId, boolean titular, Integer numeroUniforme, long usuarioId) {
         ConvocatoriaPartido convocatoria = convocatoriaDao.findById(convocatoriaId)
                 .orElseThrow(() -> new IllegalArgumentException("La convocatoria no existe"));
         Usuario usuario = usuario(usuarioId);
@@ -378,8 +397,11 @@ public class ConvocatoriaPartidoService {
             throw new IllegalArgumentException("Durante el partido debes registrar una sustitución seleccionando quién sale y quién entra");
         }
         if (titular && !convocatoria.isTitular()) {
-            validarMaxTitulares(convocatoria.getPartido(),
-                    equipoDeJugadorEnPartido(convocatoria.getPartido(), convocatoria.getJugador()));
+            Partido partido = convocatoria.getPartido();
+            Equipo equipo = equipoDeJugadorEnPartido(partido, convocatoria.getJugador());
+            validarMaxTitulares(partido, equipo);
+            validarNumeroUniforme(partido, equipo, convocatoria, numeroUniforme == null ? -1 : numeroUniforme);
+            convocatoria.setNumeroUniforme(numeroUniforme);
         }
         convocatoria.setTitular(titular);
         if (titular) {
@@ -394,7 +416,7 @@ public class ConvocatoriaPartidoService {
     }
 
     @Transactional
-    public void sustituir(long partidoId, long titularId, long suplenteId, long usuarioId) {
+    public void sustituir(long partidoId, long titularId, long suplenteId, int numeroUniforme, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestorOrganizador(partido, usuario);
@@ -403,11 +425,18 @@ public class ConvocatoriaPartidoService {
                 .orElseThrow(() -> new IllegalArgumentException("El jugador titular no existe en este partido"));
         ConvocatoriaPartido entra = convocatoriaDao.findById(suplenteId)
                 .orElseThrow(() -> new IllegalArgumentException("El jugador suplente no existe en este partido"));
+        validarNumeroUniforme(
+                partido,
+                equipoDeJugadorEnPartido(partido, entra.getJugador()),
+                entra,
+                numeroUniforme);
+        entra.setNumeroUniforme(numeroUniforme);
         sustituirConvocados(partido, sale, entra);
     }
 
     @Transactional
-    public void sustituirJugadorInscrito(long partidoId, long titularId, long jugadorId, long usuarioId) {
+    public void sustituirJugadorInscrito(
+            long partidoId, long titularId, long jugadorId, int numeroUniforme, long usuarioId) {
         Partido partido = partido(partidoId);
         validarGestorOrganizador(partido, usuario(usuarioId));
         validarEstadoEditable(partido);
@@ -434,9 +463,27 @@ public class ConvocatoriaPartidoService {
             entra = new ConvocatoriaPartido();
             entra.setPartido(partido);
             entra.setJugador(jugador);
+        }
+        validarNumeroUniforme(partido, equipoEntra, entra, numeroUniforme);
+        entra.setNumeroUniforme(numeroUniforme);
+        if (entra.getId() == null) {
             entra = convocatoriaDao.save(entra);
         }
         sustituirConvocados(partido, sale, entra);
+    }
+
+    private void validarNumeroUniforme(
+            Partido partido, Equipo equipo, ConvocatoriaPartido convocatoria, int numeroUniforme) {
+        if (numeroUniforme < 0 || numeroUniforme > 99) {
+            throw new IllegalArgumentException("El número de uniforme debe estar entre 0 y 99");
+        }
+        Long convocatoriaId = convocatoria.getId();
+        boolean numeroEnUso = convocatoriasDelEquipo(partido, equipo).stream()
+                .anyMatch(item -> !Objects.equals(item.getId(), convocatoriaId)
+                        && Objects.equals(item.getNumeroUniforme(), numeroUniforme));
+        if (numeroEnUso) {
+            throw new IllegalArgumentException("El número de uniforme ya está asignado a otro jugador de este equipo en el partido");
+        }
     }
 
     private void sustituirConvocados(Partido partido, ConvocatoriaPartido sale, ConvocatoriaPartido entra) {
@@ -737,12 +784,6 @@ public class ConvocatoriaPartidoService {
             return;
         }
         throw new IllegalArgumentException("Solo el organizador o el delegado del equipo puede modificar la lista");
-    }
-
-    private void validarEstadoProgramado(Partido partido) {
-        if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO) {
-            throw new IllegalArgumentException("La alineación solo puede cambiarse cuando el partido está programado");
-        }
     }
 
     private Equipo equipoDelPartido(Partido partido, long equipoId) {

@@ -61,8 +61,9 @@ public class ConvocatoriaPartidoRest {
     public ConvocatoriaPartido agregarEnPosicionVacia(@PathVariable long partidoId,
                                                        @RequestParam long jugadorId,
                                                        @RequestParam int posicion,
+                                                       @RequestParam int numeroUniforme,
                                                        @AuthenticationPrincipal Long usuarioId) {
-        return service.agregarEnPosicionVacia(partidoId, jugadorId, posicion, usuarioId);
+        return service.agregarEnPosicionVacia(partidoId, jugadorId, posicion, numeroUniforme, usuarioId);
     }
 
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
@@ -121,31 +122,47 @@ public class ConvocatoriaPartidoRest {
     }
 
     @PostMapping("/{partidoId}/convocados")
-    public ConvocatoriaPartido agregar(@PathVariable long partidoId, @RequestParam long jugadorId, @RequestParam(defaultValue = "false") boolean titular, @AuthenticationPrincipal Long usuarioId) {
-        return service.agregar(partidoId, jugadorId, titular, usuarioId);
+    public ConvocatoriaPartido agregar(@PathVariable long partidoId,
+                                       @RequestParam long jugadorId,
+                                       @RequestParam(defaultValue = "false") boolean titular,
+                                       @RequestParam(required = false) Integer numeroUniforme,
+                                       @AuthenticationPrincipal Long usuarioId) {
+        return service.agregar(partidoId, jugadorId, titular, numeroUniforme, usuarioId);
     }
 
     @PostMapping("/{partidoId}/convocados/identificacion")
-    public ConvocatoriaPartido agregarPorIdentificacion(@PathVariable long partidoId, @RequestParam String identificacion, @RequestParam(defaultValue = "false") boolean titular, @AuthenticationPrincipal Long usuarioId) {
-        return service.agregarPorIdentificacion(partidoId, identificacion, titular, usuarioId);
+    public ConvocatoriaPartido agregarPorIdentificacion(@PathVariable long partidoId,
+                                                        @RequestParam String identificacion,
+                                                        @RequestParam(defaultValue = "false") boolean titular,
+                                                        @RequestParam(required = false) Integer numeroUniforme,
+                                                        @AuthenticationPrincipal Long usuarioId) {
+        return service.agregarPorIdentificacion(partidoId, identificacion, titular, numeroUniforme, usuarioId);
     }
 
     @PutMapping("/convocados/{convocatoriaId}/titular")
-    public ConvocatoriaPartido titular(@PathVariable long convocatoriaId, @RequestParam boolean titular, @AuthenticationPrincipal Long usuarioId) {
-        return service.cambiarTitular(convocatoriaId, titular, usuarioId);
+    public ConvocatoriaPartido titular(@PathVariable long convocatoriaId,
+                                       @RequestParam boolean titular,
+                                       @RequestParam(required = false) Integer numeroUniforme,
+                                       @AuthenticationPrincipal Long usuarioId) {
+        return service.cambiarTitular(convocatoriaId, titular, numeroUniforme, usuarioId);
     }
 
     @PostMapping("/{partidoId}/sustituciones")
-    public void sustituir(@PathVariable long partidoId, @RequestParam long titularId, @RequestParam long suplenteId, @AuthenticationPrincipal Long usuarioId) {
-        service.sustituir(partidoId, titularId, suplenteId, usuarioId);
+    public void sustituir(@PathVariable long partidoId,
+                          @RequestParam long titularId,
+                          @RequestParam long suplenteId,
+                          @RequestParam int numeroUniforme,
+                          @AuthenticationPrincipal Long usuarioId) {
+        service.sustituir(partidoId, titularId, suplenteId, numeroUniforme, usuarioId);
     }
 
     @PostMapping("/{partidoId}/sustituciones/jugador-inscrito")
     public void sustituirJugadorInscrito(@PathVariable long partidoId,
                                          @RequestParam long titularId,
                                          @RequestParam long jugadorId,
+                                         @RequestParam int numeroUniforme,
                                          @AuthenticationPrincipal Long usuarioId) {
-        service.sustituirJugadorInscrito(partidoId, titularId, jugadorId, usuarioId);
+        service.sustituirJugadorInscrito(partidoId, titularId, jugadorId, numeroUniforme, usuarioId);
     }
 
     @PutMapping("/convocados/{convocatoriaId}/numero")
