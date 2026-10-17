@@ -200,10 +200,8 @@ public class ConvocatoriaPartidoService {
         if (posicion < 0 || posicion >= posicionesTotales) {
             throw new IllegalArgumentException("La posición seleccionada no pertenece a la formación");
         }
-        boolean ocupada = convocatoriasDelEquipo(partido, equipo).stream()
-                .anyMatch(item -> item.isTitular()
-                        && !Objects.equals(item.getId(), convocatoriaId)
-                        && Objects.equals(item.getPosicionAlineacion(), posicion));
+        boolean ocupada = posicionesEfectivas(partido, equipo, posicionesTotales).entrySet().stream()
+                .anyMatch(entry -> !Objects.equals(entry.getKey(), convocatoriaId) && entry.getValue() == posicion);
         if (ocupada) {
             throw new IllegalArgumentException("La posición seleccionada ya está ocupada");
         }
@@ -339,7 +337,7 @@ public class ConvocatoriaPartidoService {
     public void sustituir(long partidoId, long titularId, long suplenteId, long usuarioId) {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
-        validarGestor(partido, usuario);
+        validarGestorOrganizador(partido, usuario);
         validarEstadoEditable(partido);
         ConvocatoriaPartido sale = convocatoriaDao.findById(titularId)
                 .orElseThrow(() -> new IllegalArgumentException("El jugador titular no existe en este partido"));
@@ -702,6 +700,29 @@ public class ConvocatoriaPartidoService {
             }
         }
         return 0;
+    }
+
+    private Map<Long, Integer> posicionesEfectivas(Partido partido, Equipo equipo, int totalPosiciones) {
+        List<ConvocatoriaPartido> titulares = convocatoriasDelEquipo(partido, equipo).stream()
+                .filter(ConvocatoriaPartido::isTitular)
+                .sorted(Comparator.comparing(ConvocatoriaPartido::getPosicionAlineacion,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(ConvocatoriaPartido::getId))
+                .toList();
+        Map<Long, Integer> posiciones = new HashMap<>();
+        Set<Integer> ocupadas = new java.util.HashSet<>();
+        for (ConvocatoriaPartido titular : titulares) {
+            Integer posicion = titular.getPosicionAlineacion();
+            if (posicion == null || posicion < 0 || posicion >= totalPosiciones || ocupadas.contains(posicion)) {
+                posicion = 0;
+                while (posicion < totalPosiciones && ocupadas.contains(posicion)) posicion++;
+            }
+            if (posicion < totalPosiciones) {
+                posiciones.put(titular.getId(), posicion);
+                ocupadas.add(posicion);
+            }
+        }
+        return posiciones;
     }
 
     private void validarGestorOrganizador(Partido partido, Usuario usuario) {
