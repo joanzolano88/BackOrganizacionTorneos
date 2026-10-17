@@ -173,6 +173,22 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void listar_usaElEquipoDeLaInscripcionDelTorneoParaClasificarLaConvocatoria() {
+        jugadorLocal.setEquipo(visitante);
+        ConvocatoriaPartido convocatoria = new ConvocatoriaPartido();
+        convocatoria.setPartido(partido);
+        convocatoria.setJugador(jugadorLocal);
+        convocatoria.setTitular(true);
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(convocatoria));
+        when(participacionDao.findByTorneo(partido.getTorneo()))
+                .thenReturn(List.of(participacion(jugadorLocal, local)));
+
+        List<ConvocatoriaPartido> convocatorias = service.listar(5L);
+
+        assertEquals(local, convocatorias.get(0).getEquipo());
+    }
+
+    @Test
     void jugadoresDelEquipo_soloDevuelveJugadoresActivosInscritosEnElEquipoYTorneo() {
         Jugador inactivo = new Jugador();
         inactivo.setId(102L);

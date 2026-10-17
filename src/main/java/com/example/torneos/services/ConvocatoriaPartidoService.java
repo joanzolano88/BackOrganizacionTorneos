@@ -27,7 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -43,8 +45,19 @@ public class ConvocatoriaPartidoService {
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
     @Autowired private SancionJugadorTorneoService sancionService;
 
+    @Transactional(readOnly = true)
     public List<ConvocatoriaPartido> listar(long partidoId) {
-        return convocatoriaDao.findByPartido(partido(partidoId));
+        Partido partido = partido(partidoId);
+        Map<Long, Equipo> equipoPorJugador = new HashMap<>();
+        participacionDao.findByTorneo(partido.getTorneo()).forEach(participacion ->
+                equipoPorJugador.put(participacion.getJugador().getId(), participacion.getEquipo()));
+        List<ConvocatoriaPartido> convocatorias = convocatoriaDao.findByPartido(partido);
+        convocatorias.forEach(convocatoria -> {
+            Jugador jugador = convocatoria.getJugador();
+            if (jugador == null) return;
+            convocatoria.setEquipo(equipoPorJugador.getOrDefault(jugador.getId(), jugador.getEquipo()));
+        });
+        return convocatorias;
     }
 
     public List<Jugador> jugadoresDelEquipo(long partidoId, long equipoId) {
