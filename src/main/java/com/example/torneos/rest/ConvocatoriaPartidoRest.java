@@ -57,6 +57,14 @@ public class ConvocatoriaPartidoRest {
         service.moverPosicionAlineacion(partidoId, convocatoriaId, posicion, usuarioId);
     }
 
+    @PostMapping("/{partidoId}/alineacion/ocupar-vacia")
+    public ConvocatoriaPartido agregarEnPosicionVacia(@PathVariable long partidoId,
+                                                       @RequestParam long jugadorId,
+                                                       @RequestParam int posicion,
+                                                       @AuthenticationPrincipal Long usuarioId) {
+        return service.agregarEnPosicionVacia(partidoId, jugadorId, posicion, usuarioId);
+    }
+
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
     public List<DtoJugadorDisponiblePartido> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {
         return service.jugadoresDelEquipo(partidoId, equipoId);

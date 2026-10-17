@@ -209,6 +209,59 @@ public class ConvocatoriaPartidoService {
         convocatoriaDao.save(convocatoria);
     }
 
+    @Transactional
+    public ConvocatoriaPartido agregarEnPosicionVacia(long partidoId, long jugadorId, int posicion, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Esta acción solo está disponible durante el partido");
+        }
+
+        Jugador jugador = jugadorDao.findById(jugadorId)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
+        sancionService.validarElegibilidad(partido, jugador);
+        Equipo equipo = equipoDeJugadorEnPartido(partido, jugador);
+        validarEquipoDelDelegado(partido, equipo, usuario);
+        String formacion = alineacionDao.findByPartidoAndEquipo(partido, equipo)
+                .map(AlineacionEquipoPartido::getFormacion)
+                .orElse(FORMACION_INICIAL);
+        int posicionesTotales = FORMACIONES.get(formacion).stream().mapToInt(Integer::intValue).sum();
+        if (posicion < 0 || posicion >= posicionesTotales) {
+            throw new IllegalArgumentException("La posición seleccionada no pertenece a la formación actual");
+        }
+        boolean posicionOcupada = posicionesEfectivas(partido, equipo, posicionesTotales).values().stream()
+                .anyMatch(posicionActual -> posicionActual == posicion);
+        if (posicionOcupada) {
+            throw new IllegalArgumentException("La posición ya está ocupada por otro jugador");
+        }
+
+        ConvocatoriaPartido convocatoria = convocatoriaDao.findByPartidoAndJugador(partido, jugador).orElse(null);
+        if (convocatoria != null && convocatoria.isTitular()) {
+            throw new IllegalArgumentException("El jugador ya está en la alineación");
+        }
+        if (convocatoria == null &&
+                convocatoriaDao.countByPartidoAndJugadorEquipo(partido, equipo) >= maximoConvocados(partido)) {
+            throw new IllegalArgumentException("Se alcanzó el máximo de jugadores convocados para " + equipo.getNombre());
+        }
+        if (convocatoria != null && convocatoria.isFueTitular() &&
+                partido.getTorneo().getModoCambioJugador() != ModoCambioJugador.SALIR_ENTRAR) {
+            throw new IllegalArgumentException("Este jugador ya salió del partido y no puede volver a entrar");
+        }
+        validarMaxTitulares(partido, equipo);
+        if (convocatoria == null) {
+            convocatoria = new ConvocatoriaPartido();
+            convocatoria.setPartido(partido);
+            convocatoria.setJugador(jugador);
+        }
+        convocatoria.setTitular(true);
+        convocatoria.setFueTitular(true);
+        convocatoria.setPosicionAlineacion(posicion);
+        ConvocatoriaPartido guardada = convocatoriaDao.save(convocatoria);
+        registrarEvento(partido, jugador, TipoEventoPartido.ENTRA_TITULAR);
+        return guardada;
+    }
+
     public List<DtoJugadorDisponiblePartido> jugadoresDelEquipo(long partidoId, long equipoId) {
         Partido partido = partido(partidoId);
         Equipo equipo = equiposDelPartido(partido).stream()
@@ -260,6 +313,9 @@ public class ConvocatoriaPartidoService {
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
         validarEstadoEditable(partido);
+        if (partido.getEstadoPartido() == EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Durante el partido solo puedes agregar un jugador para ocupar una posición vacía");
+        }
         Jugador jugador = jugadorDao.findById(jugadorId)
                 .orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
         sancionService.validarElegibilidad(partido, jugador);
@@ -291,6 +347,10 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
+        validarEstadoEditable(partido);
+        if (partido.getEstadoPartido() == EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Durante el partido solo puedes agregar un jugador para ocupar una posición vacía");
+        }
         Jugador jugador = jugadorDao.findByIdentificacion(identificacion.trim()).orElse(null);
         if (jugador == null) {
             Equipo equipo = equipoDelGestor(partido, usuario);
