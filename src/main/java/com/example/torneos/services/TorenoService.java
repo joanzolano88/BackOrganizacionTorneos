@@ -106,10 +106,9 @@ public class TorenoService {
 
         return torneoList;
     }
+    @Transactional(readOnly = true)
     public List<DtoOptionTorneo> getOptionByCiudad(long ciudadId) {
-        return torneoDao.findByCiudadId(ciudadId).stream()
-                .map(torneo -> new DtoOptionTorneo(torneo.getNombre(), torneo.getId()))
-                .toList();
+        return torneoDao.findOptionsByCiudadId(ciudadId);
     }
     @Transactional(readOnly = true)
     public List<DtoAyudanteTorneo> listarAyudantes(long torneoId, long usuarioId) {

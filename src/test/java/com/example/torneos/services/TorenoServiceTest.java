@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -33,6 +34,7 @@ import com.example.torneos.entities.Reglamento;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.entities.Ciudad;
 import com.example.torneos.entities.Deporte;
+import com.example.torneos.DTO.DtoOptionTorneo;
 
 @ExtendWith(MockitoExtension.class)
 class TorenoServiceTest {
@@ -187,6 +189,17 @@ class TorenoServiceTest {
         when(usuarioDao.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> torneoService.getByUsuarioId(99L));
+    }
+
+    @Test
+    void getOptionByCiudad_delegaLaConsultaDeProyeccion() {
+        List<DtoOptionTorneo> opciones = List.of(new DtoOptionTorneo("Copa local", 12L));
+        when(torneoDao.findOptionsByCiudadId(1L)).thenReturn(opciones);
+
+        List<DtoOptionTorneo> resultado = torneoService.getOptionByCiudad(1L);
+
+        assertEquals(opciones, resultado);
+        verify(torneoDao).findOptionsByCiudadId(1L);
     }
 
     @Test

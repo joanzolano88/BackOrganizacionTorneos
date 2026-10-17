@@ -1,5 +1,6 @@
 package com.example.torneos.dao;
 
+import com.example.torneos.DTO.DtoOptionTorneo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
@@ -17,6 +18,8 @@ public interface TorneoDao extends JpaRepository<Torneo, Long> {
      List<Torneo> findByEncargadoTorneo(Usuario usuario);
      @Query("select t from Torneo t where t.ciudad.id = :ciudadId order by t.nombre")
      List<Torneo> findByCiudadId(@Param("ciudadId") Long ciudadId);
+     @Query("select new com.example.torneos.DTO.DtoOptionTorneo(t.nombre, t.id) from Torneo t where t.ciudad.id = :ciudadId order by t.nombre")
+     List<DtoOptionTorneo> findOptionsByCiudadId(@Param("ciudadId") Long ciudadId);
      @Query("select distinct t from Torneo t left join fetch t.ciudad c left join fetch c.departamento d left join fetch t.deporte where (:departamento is null or lower(d.nombre) = lower(:departamento)) and (:usuarioId is null or t.encargadoTorneo.id = :usuarioId)")
      List<Torneo> buscarListado(@Param("departamento") String departamento, @Param("usuarioId") Long usuarioId);
 }
