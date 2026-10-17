@@ -13,9 +13,11 @@ import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.EventoPartido;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.Partido;
+import com.example.torneos.entities.ParticipacionJugadorTorneo;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
+import com.example.torneos.enums.EstadoJugador;
 import com.example.torneos.enums.TipoEventoPartido;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,11 +90,11 @@ class ConvocatoriaPartidoServiceTest {
         asistenteLocal.setEquipo(local);
 
         when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
-        when(usuarioDao.findById(99L)).thenReturn(Optional.of(organizador));
     }
 
     @Test
     void registrarGol_guardaAutorYAsistenciaYActualizaMarcador() {
+        usuarioOrganizador();
         convocar(jugadorLocal);
         convocar(asistenteLocal);
         when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
@@ -118,6 +120,7 @@ class ConvocatoriaPartidoServiceTest {
 
     @Test
     void registrarGol_autogolSumaAlEquipoObjetivoYRegistraAlJugadorRival() {
+        usuarioOrganizador();
         convocar(jugadorVisitante);
         when(jugadorDao.findById(200L)).thenReturn(Optional.of(jugadorVisitante));
         when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -139,6 +142,7 @@ class ConvocatoriaPartidoServiceTest {
 
     @Test
     void registrarGol_rechazaAutorDeGolDelEquipoContrarioSinCambiarMarcador() {
+        usuarioOrganizador();
         convocar(jugadorVisitante);
         when(jugadorDao.findById(200L)).thenReturn(Optional.of(jugadorVisitante));
         DtoRegistrarGol solicitud = new DtoRegistrarGol();
@@ -153,7 +157,10 @@ class ConvocatoriaPartidoServiceTest {
 
     @Test
     void agregarTitular_aceptaJugadorAsociadoAlEquipoPrincipal() {
+        usuarioOrganizador();
         partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
+                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
         when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
         when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -163,6 +170,38 @@ class ConvocatoriaPartidoServiceTest {
         assertEquals(jugadorLocal, convocatoria.getJugador());
         assertEquals(local, convocatoria.getJugador().getEquipo());
         assertTrue(convocatoria.isTitular());
+    }
+
+    @Test
+    void jugadoresDelEquipo_soloDevuelveJugadoresActivosInscritosEnElEquipoYTorneo() {
+        Jugador inactivo = new Jugador();
+        inactivo.setId(102L);
+        inactivo.setEstadoJugador(EstadoJugador.INACTIVO);
+        Jugador delEquipoRival = new Jugador();
+        delEquipoRival.setId(201L);
+        delEquipoRival.setEstadoJugador(EstadoJugador.ACTIVO);
+        jugadorLocal.setEstadoJugador(EstadoJugador.ACTIVO);
+        when(participacionDao.findByTorneo(partido.getTorneo())).thenReturn(List.of(
+                participacion(jugadorLocal, local),
+                participacion(inactivo, local),
+                participacion(delEquipoRival, visitante)));
+
+        List<Jugador> disponibles = service.jugadoresDelEquipo(5L, 10L);
+
+        assertEquals(List.of(jugadorLocal), disponibles);
+    }
+
+    private ParticipacionJugadorTorneo participacion(Jugador jugador, Equipo equipo) {
+        ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
+        participacion.setTorneo(partido.getTorneo());
+        participacion.setJugador(jugador);
+        participacion.setEquipo(equipo);
+        participacion.setParticipando(true);
+        return participacion;
+    }
+
+    private void usuarioOrganizador() {
+        when(usuarioDao.findById(99L)).thenReturn(Optional.of(organizador));
     }
 
     private void convocar(Jugador jugador) {

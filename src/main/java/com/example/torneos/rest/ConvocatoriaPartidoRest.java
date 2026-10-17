@@ -24,7 +24,9 @@ public class ConvocatoriaPartidoRest {
     public List<ConvocatoriaPartido> listar(@PathVariable long partidoId) { return service.listar(partidoId); }
 
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
-    public List<Jugador> disponibles(@PathVariable long equipoId) { return service.jugadoresDelEquipo(equipoId); }
+    public List<Jugador> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {
+        return service.jugadoresDelEquipo(partidoId, equipoId);
+    }
 
     @GetMapping("/{partidoId}/jugador/identificacion/{identificacion}")
     public Jugador buscar(@PathVariable long partidoId, @PathVariable String identificacion, @AuthenticationPrincipal Long usuarioId) { return service.buscarPorIdentificacion(partidoId, identificacion, usuarioId); }

@@ -18,6 +18,7 @@ import com.example.torneos.entities.Partido;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
+import com.example.torneos.enums.EstadoJugador;
 import com.example.torneos.enums.TipoUsuario;
 import com.example.torneos.enums.TipoEventoPartido;
 import com.example.torneos.enums.ModoCambioJugador;
@@ -46,8 +47,17 @@ public class ConvocatoriaPartidoService {
         return convocatoriaDao.findByPartido(partido(partidoId));
     }
 
-    public List<Jugador> jugadoresDelEquipo(long equipoId) {
-        return jugadorDao.findByEquipo(equipo(equipoId));
+    public List<Jugador> jugadoresDelEquipo(long partidoId, long equipoId) {
+        Partido partido = partido(partidoId);
+        Equipo equipo = equiposDelPartido(partido).stream()
+                .filter(item -> item.getId() == equipoId)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("El equipo no participa en este partido"));
+        return participacionDao.findByTorneo(partido.getTorneo()).stream()
+                .filter(participacion -> participacion.getEquipo().getId() == equipo.getId())
+                .map(participacion -> participacion.getJugador())
+                .filter(jugador -> jugador.getEstadoJugador() == null || jugador.getEstadoJugador() == EstadoJugador.ACTIVO)
+                .toList();
     }
 
     public Jugador buscarPorIdentificacion(long partidoId, String identificacion, long usuarioId) {
@@ -56,7 +66,7 @@ public class ConvocatoriaPartidoService {
         validarGestor(partido, usuario);
         Jugador jugador = jugadorDao.findByIdentificacion(identificacion.trim())
             .orElseThrow(() -> new IllegalArgumentException("No se encontró un jugador con esa identificación"));
-        validarEquipoDelDelegado(partido, jugador.getEquipo(), usuario);
+        validarEquipoDelDelegado(partido, equipoDeJugadorEnPartido(partido, jugador), usuario);
         return jugador;
     }
 
@@ -465,6 +475,13 @@ public class ConvocatoriaPartidoService {
     }
 
     private Equipo equipoDeJugadorEnPartido(Partido partido, Jugador jugador) {
+        Equipo equipoInscrito = participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador)
+                .map(com.example.torneos.entities.ParticipacionJugadorTorneo::getEquipo)
+                .orElse(null);
+        if (equipoInscrito != null && equiposDelPartido(partido).stream()
+                .anyMatch(equipo -> equipo.getId() == equipoInscrito.getId())) {
+            return equipoInscrito;
+        }
         for (Equipo equipo : equiposDelPartido(partido)) {
             boolean equipoPrincipal = jugador.getEquipo() != null && jugador.getEquipo().getId() == equipo.getId();
             boolean equipoAdicional = jugador.getEquipos() != null &&
