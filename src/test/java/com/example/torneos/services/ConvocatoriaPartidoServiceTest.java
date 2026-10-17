@@ -30,6 +30,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -148,6 +149,20 @@ class ConvocatoriaPartidoServiceTest {
 
         assertEquals(0, partido.getAnotacionesEquipoLocal());
         verify(eventoDao, org.mockito.Mockito.never()).save(any(EventoPartido.class));
+    }
+
+    @Test
+    void agregarTitular_aceptaJugadorAsociadoAlEquipoPrincipal() {
+        partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConvocatoriaPartido convocatoria = service.agregar(5L, 100L, true, 99L);
+
+        assertEquals(jugadorLocal, convocatoria.getJugador());
+        assertEquals(local, convocatoria.getJugador().getEquipo());
+        assertTrue(convocatoria.isTitular());
     }
 
     private void convocar(Jugador jugador) {

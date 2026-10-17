@@ -465,9 +465,11 @@ public class ConvocatoriaPartidoService {
     }
 
     private Equipo equipoDeJugadorEnPartido(Partido partido, Jugador jugador) {
-        if (jugador.getEquipos() != null) {
-            if (jugador.getEquipos().stream().anyMatch(equipo -> equipo.getId() == partido.getEquipoLocal().getId())) return partido.getEquipoLocal();
-            if (jugador.getEquipos().stream().anyMatch(equipo -> equipo.getId() == partido.getEquipoVisitante().getId())) return partido.getEquipoVisitante();
+        for (Equipo equipo : equiposDelPartido(partido)) {
+            boolean equipoPrincipal = jugador.getEquipo() != null && jugador.getEquipo().getId() == equipo.getId();
+            boolean equipoAdicional = jugador.getEquipos() != null &&
+                    jugador.getEquipos().stream().anyMatch(inscrito -> inscrito.getId() == equipo.getId());
+            if (equipoPrincipal || equipoAdicional) return equipo;
         }
         throw new IllegalArgumentException("El jugador no pertenece a uno de los equipos del partido");
     }
