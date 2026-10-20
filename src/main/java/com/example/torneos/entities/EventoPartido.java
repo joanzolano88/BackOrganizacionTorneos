@@ -21,6 +21,8 @@ public class EventoPartido {
     private TipoEventoPartido tipo;
     private int minuto;
     private LocalDateTime registradoEn;
+    private boolean penalti;
+    private boolean dobleAmarilla;
 
     @ManyToOne
     @JoinColumn(nullable = false)
@@ -29,4 +31,12 @@ public class EventoPartido {
     @ManyToOne
     @JoinColumn(nullable = false)
     private Jugador jugador;
+
+    @ManyToOne
+    @JoinColumn
+    private Jugador asistidor;
+
+    @ManyToOne
+    @JoinColumn
+    private Equipo equipoAnotador;
 }

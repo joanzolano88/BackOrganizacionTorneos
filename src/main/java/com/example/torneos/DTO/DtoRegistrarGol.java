@@ -8,5 +8,6 @@ public class DtoRegistrarGol {
     private Long jugadorId;
     private Long asistenciaId;
     private boolean autogol;
+    private boolean penalti;
     private int minuto;
 }

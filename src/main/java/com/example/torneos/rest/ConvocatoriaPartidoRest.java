@@ -6,6 +6,8 @@ import com.example.torneos.DTO.DtoEventoPartido;
 import com.example.torneos.DTO.DtoFormacionPartido;
 import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
 import com.example.torneos.DTO.DtoSancionJugadorPartido;
+import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
+import com.example.torneos.DTO.DtoSolicitudSustitucion;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -81,7 +83,13 @@ public class ConvocatoriaPartidoRest {
                         evento.getId(),
                         evento.getTipo(),
                         evento.getMinuto(),
-                        evento.getJugador().getId()))
+                        evento.getJugador().getId(),
+                        evento.getAsistidor() == null ? null : evento.getAsistidor().getId(),
+                        evento.isPenalti(),
+                        evento.isDobleAmarilla(),
+                        evento.getEquipoAnotador() != null
+                                ? evento.getEquipoAnotador().getId()
+                                : evento.getJugador().getEquipo() == null ? null : evento.getJugador().getEquipo().getId()))
                 .toList();
     }
 
@@ -110,8 +118,13 @@ public class ConvocatoriaPartidoRest {
     }
 
     @PostMapping("/{partidoId}/eventos")
-    public EventoPartido registrarEvento(@PathVariable long partidoId, @RequestParam long jugadorId, @RequestParam TipoEventoPartido tipo, @RequestParam(defaultValue = "0") int minuto, @AuthenticationPrincipal Long usuarioId) {
-        return service.registrarEvento(partidoId, jugadorId, tipo, minuto, usuarioId);
+    public EventoPartido registrarEvento(@PathVariable long partidoId,
+                                         @RequestParam long jugadorId,
+                                         @RequestParam TipoEventoPartido tipo,
+                                         @RequestParam(defaultValue = "0") int minuto,
+                                         @RequestParam(defaultValue = "false") boolean dobleAmarilla,
+                                         @AuthenticationPrincipal Long usuarioId) {
+        return service.registrarEvento(partidoId, jugadorId, tipo, minuto, dobleAmarilla, usuarioId);
     }
 
     @PostMapping("/{partidoId}/goles")
@@ -152,8 +165,9 @@ public class ConvocatoriaPartidoRest {
                           @RequestParam long titularId,
                           @RequestParam long suplenteId,
                           @RequestParam int numeroUniforme,
+                          @RequestParam(defaultValue = "0") int minuto,
                           @AuthenticationPrincipal Long usuarioId) {
-        service.sustituir(partidoId, titularId, suplenteId, numeroUniforme, usuarioId);
+        service.sustituir(partidoId, titularId, suplenteId, numeroUniforme, minuto, usuarioId);
     }
 
     @PostMapping("/{partidoId}/sustituciones/jugador-inscrito")
@@ -161,8 +175,41 @@ public class ConvocatoriaPartidoRest {
                                          @RequestParam long titularId,
                                          @RequestParam long jugadorId,
                                          @RequestParam int numeroUniforme,
+                                         @RequestParam(defaultValue = "0") int minuto,
                                          @AuthenticationPrincipal Long usuarioId) {
-        service.sustituirJugadorInscrito(partidoId, titularId, jugadorId, numeroUniforme, usuarioId);
+        service.sustituirJugadorInscrito(partidoId, titularId, jugadorId, numeroUniforme, minuto, usuarioId);
+    }
+
+    /**
+     * Angular API: delegate request body is { titularId, suplenteId | jugadorId, numeroUniforme }.
+     */
+    @PostMapping("/{partidoId}/solicitudes-sustitucion")
+    public DtoSolicitudSustitucion solicitarSustitucion(
+            @PathVariable long partidoId,
+            @RequestBody DtoCrearSolicitudSustitucion solicitud,
+            @AuthenticationPrincipal Long usuarioId) {
+        return service.solicitarSustitucion(partidoId, solicitud, usuarioId);
+    }
+
+    /** Angular API: list all pending and resolved substitution requests for this match. */
+    @GetMapping("/{partidoId}/solicitudes-sustitucion")
+    public List<DtoSolicitudSustitucion> listarSolicitudesSustitucion(
+            @PathVariable long partidoId, @AuthenticationPrincipal Long usuarioId) {
+        return service.listarSolicitudesSustitucion(partidoId, usuarioId);
+    }
+
+    /** Angular API: approve a request; substitution and match events are applied atomically. */
+    @PutMapping("/solicitudes-sustitucion/{solicitudId}/aprobar")
+    public DtoSolicitudSustitucion aprobarSolicitudSustitucion(
+            @PathVariable long solicitudId, @AuthenticationPrincipal Long usuarioId) {
+        return service.aprobarSolicitudSustitucion(solicitudId, usuarioId);
+    }
+
+    /** Angular API: reject a request without changing the match. */
+    @PutMapping("/solicitudes-sustitucion/{solicitudId}/rechazar")
+    public DtoSolicitudSustitucion rechazarSolicitudSustitucion(
+            @PathVariable long solicitudId, @AuthenticationPrincipal Long usuarioId) {
+        return service.rechazarSolicitudSustitucion(solicitudId, usuarioId);
     }
 
     @PutMapping("/convocados/{convocatoriaId}/numero")

@@ -6,16 +6,25 @@ import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.FaseActual;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PartidoDao extends JpaRepository<Partido, Long> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select partido from Partido partido where partido.id = :id")
+    Optional<Partido> findByIdForUpdate(@Param("id") Long id);
+
     @Transactional
     List<Partido> findByTorneo(Torneo torneo);
 

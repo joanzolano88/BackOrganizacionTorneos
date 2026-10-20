@@ -33,7 +33,8 @@ public class SecurityConfig {
                             "/equipo/*/participaciones", "/equipo/*/torneos", "/equipo/*/solicitudes-jugador",
                             "/equipo/*/jugadores/buscar", "/partido/*/convocados", "/partido/*/puede-gestionar",
                             "/partido/*/jugadores-disponibles/*", "/partido/*/jugador/**",
-                            "/partido/*/eventos", "/partido/*/sanciones/**").authenticated()
+                            "/partido/*/eventos", "/partido/*/sanciones/**",
+                            "/partido/*/solicitudes-sustitucion").authenticated()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, error) ->

@@ -2,13 +2,17 @@ package com.example.torneos.services;
 
 import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
+import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EventoPartidoDao;
 import com.example.torneos.dao.JugadorDao;
+import com.example.torneos.dao.NotificacionUsuarioDao;
+import com.example.torneos.dao.PagoInscripcionDao;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
 import com.example.torneos.dao.PartidoDao;
+import com.example.torneos.dao.SolicitudSustitucionPartidoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.AlineacionEquipoPartido;
@@ -16,11 +20,15 @@ import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.EventoPartido;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.Partido;
+import com.example.torneos.entities.Persona;
 import com.example.torneos.entities.ParticipacionJugadorTorneo;
+import com.example.torneos.entities.SolicitudSustitucionPartido;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.EstadoJugador;
+import com.example.torneos.enums.TipoUsuario;
+import com.example.torneos.enums.EstadoSolicitudSustitucion;
 import com.example.torneos.enums.TipoEventoPartido;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +50,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.anyLong;
 
 @ExtendWith(MockitoExtension.class)
 class ConvocatoriaPartidoServiceTest {
@@ -54,6 +63,9 @@ class ConvocatoriaPartidoServiceTest {
     @Mock private ParticipacionJugadorTorneoDao participacionDao;
     @Mock private SancionJugadorTorneoService sancionService;
     @Mock private AlineacionEquipoPartidoDao alineacionDao;
+    @Mock private SolicitudSustitucionPartidoDao solicitudSustitucionDao;
+    @Mock private NotificacionUsuarioDao notificacionDao;
+    @Mock private PagoInscripcionDao pagoInscripcionDao;
 
     @InjectMocks
     private ConvocatoriaPartidoService service;
@@ -96,6 +108,176 @@ class ConvocatoriaPartidoServiceTest {
         asistenteLocal.setEquipo(local);
 
         lenient().when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
+        lenient().when(participacionDao.findByTorneoAndJugador(any(), any())).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void solicitarSustitucion_guardaPendienteSinAplicarCambiosNiEventos() {
+        Persona delegadoPersona = new Persona();
+        delegadoPersona.setNumeroCelular("555");
+        local.setDelegado(delegadoPersona);
+        Usuario delegado = new Usuario();
+        delegado.setId(50L);
+        delegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        delegado.setNumeroCelular("555");
+        ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal, true);
+        ConvocatoriaPartido suplente = convocatoria(2L, asistenteLocal, false);
+        when(partidoDao.findByIdForUpdate(5L)).thenReturn(Optional.of(partido));
+        when(usuarioDao.findById(50L)).thenReturn(Optional.of(delegado));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), delegado)).thenReturn(Optional.empty());
+        when(solicitudSustitucionDao.existsByPartido_IdAndEquipo_IdAndEstado(anyLong(), anyLong(), any()))
+                .thenReturn(false);
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(titular));
+        when(convocatoriaDao.findById(2L)).thenReturn(Optional.of(suplente));
+        when(solicitudSustitucionDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var saved = service.solicitarSustitucion(
+                5L, new DtoCrearSolicitudSustitucion(1L, 2L, null, 12, 67), 50L);
+
+        assertEquals(10L, saved.equipoId());
+        assertEquals(1L, saved.titularId());
+        assertEquals(2L, saved.suplenteId());
+        assertEquals(12, saved.numeroUniforme());
+        assertEquals(67, saved.minuto());
+        assertEquals(com.example.torneos.enums.EstadoSolicitudSustitucion.PENDIENTE, saved.estado());
+        assertTrue(titular.isTitular());
+        assertTrue(!suplente.isTitular());
+        verify(eventoDao, never()).save(any());
+    }
+
+    @Test
+    void solicitarSustitucion_noPermiteDosPendientesDelMismoEquipo() {
+        Persona delegadoPersona = new Persona();
+        delegadoPersona.setNumeroCelular("555");
+        local.setDelegado(delegadoPersona);
+        Usuario delegado = new Usuario();
+        delegado.setId(50L);
+        delegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        delegado.setNumeroCelular("555");
+        when(partidoDao.findByIdForUpdate(5L)).thenReturn(Optional.of(partido));
+        when(usuarioDao.findById(50L)).thenReturn(Optional.of(delegado));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), delegado)).thenReturn(Optional.empty());
+        when(solicitudSustitucionDao.existsByPartido_IdAndEquipo_IdAndEstado(anyLong(), anyLong(), any()))
+                .thenReturn(true);
+
+        assertThrows(IllegalArgumentException.class, () -> service.solicitarSustitucion(
+                5L, new DtoCrearSolicitudSustitucion(1L, 2L, null, 12, 67), 50L));
+        verify(solicitudSustitucionDao, never()).save(any());
+    }
+
+    @Test
+    void listarSolicitudesSustitucion_delegadoSoloVeSolicitudesDeSuEquipo() {
+        Persona delegadoPersona = new Persona();
+        delegadoPersona.setNumeroCelular("555");
+        local.setDelegado(delegadoPersona);
+        Usuario delegado = new Usuario();
+        delegado.setId(50L);
+        delegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        delegado.setNumeroCelular("555");
+
+        SolicitudSustitucionPartido pendiente = solicitud(
+                convocatoria(1L, jugadorLocal, true), convocatoria(2L, asistenteLocal, false));
+        pendiente.setId(31L);
+        pendiente.setSolicitante(delegado);
+        pendiente.setEstado(EstadoSolicitudSustitucion.PENDIENTE);
+        SolicitudSustitucionPartido resueltaDeMiEquipo = solicitud(
+                convocatoria(3L, jugadorLocal, true), convocatoria(4L, asistenteLocal, false));
+        resueltaDeMiEquipo.setId(32L);
+        resueltaDeMiEquipo.setSolicitante(delegado);
+        resueltaDeMiEquipo.setEstado(EstadoSolicitudSustitucion.RECHAZADA);
+        when(usuarioDao.findById(50L)).thenReturn(Optional.of(delegado));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), delegado)).thenReturn(Optional.empty());
+        when(solicitudSustitucionDao.findByPartidoAndEquipoOrderByCreadaEnDesc(partido, local))
+                .thenReturn(List.of(pendiente, resueltaDeMiEquipo));
+
+        var results = service.listarSolicitudesSustitucion(5L, 50L);
+
+        assertEquals(List.of(31L, 32L), results.stream().map(item -> item.id()).toList());
+        assertTrue(results.stream().allMatch(item -> item.equipoId() == local.getId()));
+        verify(solicitudSustitucionDao, never()).findByPartidoOrderByCreadaEnDesc(partido);
+    }
+
+    @Test
+    void listarSolicitudesSustitucion_delegadoDeOtroEquipoEsRechazado() {
+        Usuario delegado = new Usuario();
+        delegado.setId(51L);
+        delegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        delegado.setNumeroCelular("sin-permiso");
+        when(usuarioDao.findById(51L)).thenReturn(Optional.of(delegado));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), delegado)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class, () -> service.listarSolicitudesSustitucion(5L, 51L));
+        verify(solicitudSustitucionDao, never()).findByPartidoAndEquipoOrderByCreadaEnDesc(any(), any());
+        verify(solicitudSustitucionDao, never()).findByPartidoOrderByCreadaEnDesc(any());
+    }
+
+    @Test
+    void aprobarSolicitudSustitucion_aplicaCambioYRegistraEventosSoloAlAprobar() {
+        ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal, true);
+        titular.setNumeroUniforme(10);
+        ConvocatoriaPartido suplente = convocatoria(2L, asistenteLocal, false);
+        suplente.setNumeroUniforme(12);
+        SolicitudSustitucionPartido solicitud = solicitud(titular, suplente);
+        when(solicitudSustitucionDao.findById(30L)).thenReturn(Optional.of(solicitud));
+        when(solicitudSustitucionDao.findByIdForUpdate(30L)).thenReturn(Optional.of(solicitud));
+        when(partidoDao.findByIdForUpdate(5L)).thenReturn(Optional.of(partido));
+        usuarioOrganizador();
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(titular));
+        when(convocatoriaDao.findById(2L)).thenReturn(Optional.of(suplente));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(titular, suplente));
+        when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var resolved = service.aprobarSolicitudSustitucion(30L, organizador.getId());
+
+        assertEquals(EstadoSolicitudSustitucion.APROBADA, resolved.estado());
+        assertTrue(!titular.isTitular());
+        assertTrue(suplente.isTitular());
+        ArgumentCaptor<EventoPartido> eventos = ArgumentCaptor.forClass(EventoPartido.class);
+        verify(eventoDao, times(2)).save(eventos.capture());
+        assertEquals(List.of(67, 67), eventos.getAllValues().stream().map(EventoPartido::getMinuto).toList());
+    }
+
+    @Test
+    void rechazarSolicitudSustitucion_noCambiaLaAlineacionNiRegistraEventos() {
+        ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal, true);
+        ConvocatoriaPartido suplente = convocatoria(2L, asistenteLocal, false);
+        SolicitudSustitucionPartido solicitud = solicitud(titular, suplente);
+        when(solicitudSustitucionDao.findById(30L)).thenReturn(Optional.of(solicitud));
+        when(solicitudSustitucionDao.findByIdForUpdate(30L)).thenReturn(Optional.of(solicitud));
+        when(partidoDao.findByIdForUpdate(5L)).thenReturn(Optional.of(partido));
+        usuarioOrganizador();
+
+        var resolved = service.rechazarSolicitudSustitucion(30L, organizador.getId());
+
+        assertEquals(EstadoSolicitudSustitucion.RECHAZADA, resolved.estado());
+        assertTrue(titular.isTitular());
+        assertTrue(!suplente.isTitular());
+        verify(eventoDao, never()).save(any(EventoPartido.class));
+    }
+
+    private ConvocatoriaPartido convocatoria(long id, Jugador jugador, boolean titular) {
+        ConvocatoriaPartido convocatoria = new ConvocatoriaPartido();
+        convocatoria.setId(id);
+        convocatoria.setPartido(partido);
+        convocatoria.setJugador(jugador);
+        convocatoria.setTitular(titular);
+        return convocatoria;
+    }
+
+    private SolicitudSustitucionPartido solicitud(
+            ConvocatoriaPartido titular, ConvocatoriaPartido suplente) {
+        SolicitudSustitucionPartido solicitud = new SolicitudSustitucionPartido();
+        solicitud.setId(30L);
+        solicitud.setPartido(partido);
+        solicitud.setEquipo(local);
+        solicitud.setSolicitante(organizador);
+        solicitud.setTitular(titular);
+        solicitud.setSuplente(suplente);
+        solicitud.setJugadorEntrante(suplente.getJugador());
+        solicitud.setNumeroUniforme(12);
+        solicitud.setMinuto(67);
+        solicitud.setEstado(EstadoSolicitudSustitucion.PENDIENTE);
+        return solicitud;
     }
 
     @Test
@@ -111,6 +293,7 @@ class ConvocatoriaPartidoServiceTest {
         solicitud.setEquipoAnotadorId(10L);
         solicitud.setJugadorId(100L);
         solicitud.setAsistenciaId(101L);
+        solicitud.setPenalti(true);
         solicitud.setMinuto(24);
 
         service.registrarGol(5L, solicitud, 99L);
@@ -121,6 +304,9 @@ class ConvocatoriaPartidoServiceTest {
         verify(eventoDao, times(2)).save(eventos.capture());
         assertEquals(List.of(TipoEventoPartido.GOL, TipoEventoPartido.ASISTENCIA),
                 eventos.getAllValues().stream().map(EventoPartido::getTipo).toList());
+        assertEquals(asistenteLocal, eventos.getAllValues().get(0).getAsistidor());
+        assertTrue(eventos.getAllValues().get(0).isPenalti());
+        assertEquals(local, eventos.getAllValues().get(0).getEquipoAnotador());
         verify(partidoDao).save(partido);
     }
 
@@ -144,6 +330,7 @@ class ConvocatoriaPartidoServiceTest {
         verify(eventoDao).save(evento.capture());
         assertEquals(TipoEventoPartido.AUTOGOL, evento.getValue().getTipo());
         assertEquals(jugadorVisitante, evento.getValue().getJugador());
+        assertEquals(local, evento.getValue().getEquipoAnotador());
     }
 
     @Test
@@ -159,6 +346,20 @@ class ConvocatoriaPartidoServiceTest {
 
         assertEquals(0, partido.getAnotacionesEquipoLocal());
         verify(eventoDao, org.mockito.Mockito.never()).save(any(EventoPartido.class));
+    }
+
+    @Test
+    void registrarEvento_guardaIndicadorDeRojaPorDobleAmarilla() {
+        usuarioOrganizador();
+        convocar(jugadorLocal);
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        EventoPartido evento = service.registrarEvento(
+                5L, 100L, TipoEventoPartido.TARJETA_ROJA, 70, true, 99L);
+
+        assertTrue(evento.isDobleAmarilla());
+        assertEquals(TipoEventoPartido.TARJETA_ROJA, evento.getTipo());
     }
 
     @Test
@@ -260,39 +461,17 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
-    void agregarEnPosicionVacia_agregaJugadorInscritoTardeEnLaPosicionSolicitada() {
+    void agregarEnPosicionVacia_rechazaAgregarTitularDuranteElPartido() {
         usuarioOrganizador();
-        ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
-        titular.setPosicionAlineacion(0);
-        Jugador jugadorTardio = new Jugador();
-        jugadorTardio.setId(102L);
-        jugadorTardio.setEquipo(local);
-        when(jugadorDao.findById(102L)).thenReturn(Optional.of(jugadorTardio));
-        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorTardio))
-                .thenReturn(Optional.of(participacion(jugadorTardio, local)));
-        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
-                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
-        when(convocatoriaDao.findByPartidoAndJugador(partido, jugadorTardio)).thenReturn(Optional.empty());
-        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(titular));
-        when(convocatoriaDao.countByPartidoAndJugadorEquipo(partido, local)).thenReturn(1L);
-        when(alineacionDao.findByPartidoAndEquipo(partido, local)).thenReturn(Optional.empty());
-        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(eventoDao.save(any(EventoPartido.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        ConvocatoriaPartido agregada = service.agregarEnPosicionVacia(5L, 102L, 3, 12, 99L);
-
-        assertEquals(jugadorTardio, agregada.getJugador());
-        assertTrue(agregada.isTitular());
-        assertTrue(agregada.isFueTitular());
-        assertEquals(3, agregada.getPosicionAlineacion());
-        verify(convocatoriaDao).save(agregada);
+        assertThrows(IllegalArgumentException.class,
+                () -> service.agregarEnPosicionVacia(5L, 102L, 3, 12, 99L));
+        verify(convocatoriaDao, never()).save(any(ConvocatoriaPartido.class));
     }
 
     @Test
     void agregarEnPosicionVacia_rechazaUnaPosicionOcupada() {
         usuarioOrganizador();
+        partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
         ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
         titular.setPosicionAlineacion(2);
         Jugador jugadorTardio = new Jugador();
@@ -313,6 +492,7 @@ class ConvocatoriaPartidoServiceTest {
     @Test
     void agregarEnPosicionVacia_rechazaNumeroDeUniformeRepetidoEnElEquipo() {
         usuarioOrganizador();
+        partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
         ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
         titular.setPosicionAlineacion(0);
         titular.setNumeroUniforme(12);
@@ -400,7 +580,7 @@ class ConvocatoriaPartidoServiceTest {
 
     @Test
     void cambiarFormacion_permiteActualizarlaDuranteElPartido() {
-        usuarioOrganizador();
+        usuarioDelegadoLocal();
         ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
         titular.setPosicionAlineacion(0);
         when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
@@ -412,7 +592,7 @@ class ConvocatoriaPartidoServiceTest {
         when(alineacionDao.save(any(AlineacionEquipoPartido.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        var alineacion = service.cambiarFormacion(5L, 10L, "4-3-3", 99L);
+        var alineacion = service.cambiarFormacion(5L, 10L, "4-3-3", 50L);
 
         assertEquals("4-3-3", alineacion.formacion());
         verify(alineacionDao).save(any(AlineacionEquipoPartido.class));
@@ -469,7 +649,7 @@ class ConvocatoriaPartidoServiceTest {
 
     @Test
     void moverPosicionAlineacion_permiteMoverTitularDuranteElPartido() {
-        usuarioOrganizador();
+        usuarioDelegadoLocal();
         ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
         titular.setPosicionAlineacion(0);
         when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(titular));
@@ -479,7 +659,7 @@ class ConvocatoriaPartidoServiceTest {
         when(alineacionDao.findByPartidoAndEquipo(partido, local)).thenReturn(Optional.empty());
         when(convocatoriaDao.save(titular)).thenReturn(titular);
 
-        service.moverPosicionAlineacion(5L, 1L, 2, 99L);
+        service.moverPosicionAlineacion(5L, 1L, 2, 50L);
 
         assertEquals(2, titular.getPosicionAlineacion());
         verify(convocatoriaDao).save(titular);
@@ -505,6 +685,18 @@ class ConvocatoriaPartidoServiceTest {
 
     private void usuarioOrganizador() {
         when(usuarioDao.findById(99L)).thenReturn(Optional.of(organizador));
+    }
+
+    private void usuarioDelegadoLocal() {
+        Persona persona = new Persona();
+        persona.setNumeroCelular("555");
+        local.setDelegado(persona);
+        Usuario delegado = new Usuario();
+        delegado.setId(50L);
+        delegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        delegado.setNumeroCelular("555");
+        when(usuarioDao.findById(50L)).thenReturn(Optional.of(delegado));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), delegado)).thenReturn(Optional.empty());
     }
 
     private void convocar(Jugador jugador) {

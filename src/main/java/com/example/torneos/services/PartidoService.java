@@ -710,9 +710,31 @@ public class PartidoService {
             throw new IllegalArgumentException("Solo se puede iniciar un partido programado");
         }
         int minimoTitulares = partido.getTorneo().getDeporte() == null ? 7 : partido.getTorneo().getDeporte().getMinimoTitulares();
+        Map<Long, Long> equipoPorJugador = participacionDao.findByTorneo(partido.getTorneo()).stream()
+                .collect(Collectors.toMap(
+                        participacion -> participacion.getJugador().getId(),
+                        participacion -> participacion.getEquipo().getId(),
+                        (primero, segundo) -> segundo));
+        List<com.example.torneos.entities.ConvocatoriaPartido> convocatorias =
+                convocatoriaDao.findByPartido(partido);
         for (Equipo equipo : List.of(partido.getEquipoLocal(), partido.getEquipoVisitante())) {
             if (convocatoriaDao.countByPartidoAndJugadorEquipoAndTitularTrue(partido, equipo) < minimoTitulares) {
                 throw new IllegalArgumentException("El equipo " + equipo.getNombre() + " no cumple el mínimo de titulares");
+            }
+            Set<Integer> numeros = new HashSet<>();
+            for (com.example.torneos.entities.ConvocatoriaPartido convocatoria : convocatorias) {
+                if (!convocatoria.isTitular() || convocatoria.getJugador() == null ||
+                        !Long.valueOf(equipo.getId()).equals(equipoPorJugador.get(convocatoria.getJugador().getId()))) {
+                    continue;
+                }
+                Integer numero = convocatoria.getNumeroUniforme();
+                if (numero == null || numero < 0 || numero > 99) {
+                    throw new IllegalArgumentException("Todos los titulares de " + equipo.getNombre() + " deben tener un número de uniforme entre 0 y 99");
+                }
+                if (!numeros.add(numero)) {
+                    throw new IllegalArgumentException("El número " + numero + " está repetido en la alineación de " + equipo.getNombre());
+                }
+                sancionService.validarElegibilidad(partido, convocatoria.getJugador());
             }
         }
         partido.setEstadoPartido(EstadoPartido.EN_PROCESO);

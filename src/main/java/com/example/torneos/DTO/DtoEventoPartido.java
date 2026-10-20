@@ -6,4 +6,8 @@ public record DtoEventoPartido(
         Long id,
         TipoEventoPartido tipo,
         int minuto,
-        Long jugadorId) {}
+        Long jugadorId,
+        Long asistidorId,
+        boolean penalti,
+        boolean dobleAmarilla,
+        Long equipoId) {}
