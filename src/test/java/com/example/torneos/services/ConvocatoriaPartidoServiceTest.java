@@ -690,6 +690,27 @@ class ConvocatoriaPartidoServiceTest {
         verify(convocatoriaDao).save(titular);
     }
 
+    @Test
+    void intercambiarPosiciones_usaPosicionesEfectivasCuandoHayIndicesDuplicados() {
+        usuarioDelegadoLocal();
+        ConvocatoriaPartido primera = convocatoria(1L, jugadorLocal);
+        ConvocatoriaPartido segunda = convocatoria(2L, asistenteLocal);
+        primera.setPosicionAlineacion(0);
+        segunda.setPosicionAlineacion(0);
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(primera));
+        when(convocatoriaDao.findById(2L)).thenReturn(Optional.of(segunda));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(primera, segunda));
+        when(alineacionDao.findByPartidoAndEquipo(partido, local)).thenReturn(Optional.empty());
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.intercambiarPosiciones(5L, 1L, 2L, 50L);
+
+        assertEquals(1, primera.getPosicionAlineacion());
+        assertEquals(0, segunda.getPosicionAlineacion());
+        verify(convocatoriaDao, times(2)).save(any(ConvocatoriaPartido.class));
+    }
+
     private ParticipacionJugadorTorneo participacion(Jugador jugador, Equipo equipo) {
         ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
         participacion.setTorneo(partido.getTorneo());

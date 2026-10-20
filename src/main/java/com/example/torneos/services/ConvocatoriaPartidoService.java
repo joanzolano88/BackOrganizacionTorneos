@@ -182,12 +182,18 @@ public class ConvocatoriaPartidoService {
         }
         validarEquipoDelDelegado(partido, equipoPrimero, usuario);
         validarPermisoAlineacionDurantePartido(partido, usuario);
-        int posicionPrimera = primera.getPosicionAlineacion() == null
-                ? indiceTitular(partido, primera)
-                : primera.getPosicionAlineacion();
-        int posicionSegunda = segunda.getPosicionAlineacion() == null
-                ? indiceTitular(partido, segunda)
-                : segunda.getPosicionAlineacion();
+        int totalPosiciones = alineacionDao.findByPartidoAndEquipo(partido, equipoPrimero)
+                .map(AlineacionEquipoPartido::getFormacion)
+                .map(FORMACIONES::get)
+                .orElse(FORMACIONES.get(FORMACION_INICIAL)).stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        Map<Long, Integer> posiciones = posicionesEfectivas(partido, equipoPrimero, totalPosiciones);
+        Integer posicionPrimera = posiciones.get(primera.getId());
+        Integer posicionSegunda = posiciones.get(segunda.getId());
+        if (posicionPrimera == null || posicionSegunda == null) {
+            throw new IllegalArgumentException("No se pudieron determinar las posiciones actuales de ambos titulares");
+        }
         primera.setPosicionAlineacion(posicionSegunda);
         segunda.setPosicionAlineacion(posicionPrimera);
         convocatoriaDao.save(primera);
@@ -1155,22 +1161,6 @@ public class ConvocatoriaPartidoService {
             throw new IllegalArgumentException("La convocatoria no pertenece a este partido");
         }
         return convocatoria;
-    }
-
-    private int indiceTitular(Partido partido, ConvocatoriaPartido convocatoria) {
-        Equipo equipo = equipoDeJugadorEnPartido(partido, convocatoria.getJugador());
-        List<ConvocatoriaPartido> titulares = convocatoriasDelEquipo(partido, equipo).stream()
-                .filter(ConvocatoriaPartido::isTitular)
-                .sorted(Comparator.comparing(ConvocatoriaPartido::getPosicionAlineacion,
-                                Comparator.nullsLast(Integer::compareTo))
-                        .thenComparing(ConvocatoriaPartido::getId))
-                .toList();
-        for (int index = 0; index < titulares.size(); index++) {
-            if (titulares.get(index).getId() != null && titulares.get(index).getId().equals(convocatoria.getId())) {
-                return index;
-            }
-        }
-        return 0;
     }
 
     private Map<Long, Integer> posicionesEfectivas(Partido partido, Equipo equipo, int totalPosiciones) {
