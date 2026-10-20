@@ -7,6 +7,7 @@ import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
 import com.example.torneos.DTO.DtoSancionJugadorPartido;
 import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
 import com.example.torneos.DTO.DtoSolicitudSustitucion;
+import com.example.torneos.DTO.DtoEventoPartido;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
@@ -816,8 +817,26 @@ public class ConvocatoriaPartidoService {
         return convocatoriaDao.save(convocatoria);
     }
 
-    public List<com.example.torneos.entities.EventoPartido> eventos(long partidoId) {
-        return eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido(partidoId));
+    @Transactional(readOnly = true)
+    public List<DtoEventoPartido> eventos(long partidoId) {
+        return eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido(partidoId)).stream()
+                .map(evento -> {
+                    Jugador jugador = evento.getJugador();
+                    Equipo equipo = evento.getEquipoAnotador();
+                    if (equipo == null && jugador != null) {
+                        equipo = jugador.getEquipo();
+                    }
+                    return new DtoEventoPartido(
+                            evento.getId(),
+                            evento.getTipo(),
+                            evento.getMinuto(),
+                            jugador == null ? null : jugador.getId(),
+                            evento.getAsistidor() == null ? null : evento.getAsistidor().getId(),
+                            evento.isPenalti(),
+                            evento.isDobleAmarilla(),
+                            equipo == null ? null : equipo.getId());
+                })
+                .toList();
     }
 
     @Transactional

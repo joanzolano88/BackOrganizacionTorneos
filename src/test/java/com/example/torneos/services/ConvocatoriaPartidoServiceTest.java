@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -209,6 +210,30 @@ class ConvocatoriaPartidoServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.listarSolicitudesSustitucion(5L, 51L));
         verify(solicitudSustitucionDao, never()).findByPartidoAndEquipoOrderByCreadaEnDesc(any(), any());
         verify(solicitudSustitucionDao, never()).findByPartidoOrderByCreadaEnDesc(any());
+    }
+
+    @Test
+    void eventos_mapeaDatosDentroDeConsultaYSoportaJugadorAusente() {
+        EventoPartido gol = new EventoPartido();
+        gol.setId(40L);
+        gol.setTipo(TipoEventoPartido.GOL);
+        gol.setMinuto(12);
+        gol.setJugador(jugadorLocal);
+        gol.setEquipoAnotador(local);
+        EventoPartido eventoSinJugador = new EventoPartido();
+        eventoSinJugador.setId(41L);
+        eventoSinJugador.setTipo(TipoEventoPartido.TARJETA_AMARILLA);
+        eventoSinJugador.setMinuto(30);
+        when(eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido)).thenReturn(List.of(gol, eventoSinJugador));
+
+        var eventos = service.eventos(5L);
+
+        assertEquals(2, eventos.size());
+        assertEquals(100L, eventos.get(0).jugadorId());
+        assertEquals(10L, eventos.get(0).equipoId());
+        assertEquals(12, eventos.get(0).minuto());
+        assertNull(eventos.get(1).jugadorId());
+        assertNull(eventos.get(1).equipoId());
     }
 
     @Test

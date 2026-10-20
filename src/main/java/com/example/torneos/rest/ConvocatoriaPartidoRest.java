@@ -78,19 +78,7 @@ public class ConvocatoriaPartidoRest {
 
     @GetMapping("/{partidoId}/eventos")
     public List<DtoEventoPartido> eventos(@PathVariable long partidoId) {
-        return service.eventos(partidoId).stream()
-                .map(evento -> new DtoEventoPartido(
-                        evento.getId(),
-                        evento.getTipo(),
-                        evento.getMinuto(),
-                        evento.getJugador().getId(),
-                        evento.getAsistidor() == null ? null : evento.getAsistidor().getId(),
-                        evento.isPenalti(),
-                        evento.isDobleAmarilla(),
-                        evento.getEquipoAnotador() != null
-                                ? evento.getEquipoAnotador().getId()
-                                : evento.getJugador().getEquipo() == null ? null : evento.getJugador().getEquipo().getId()))
-                .toList();
+        return service.eventos(partidoId);
     }
 
     @GetMapping("/{partidoId}/sanciones")
