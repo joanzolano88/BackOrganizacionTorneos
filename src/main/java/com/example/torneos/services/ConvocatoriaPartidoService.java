@@ -73,9 +73,11 @@ public class ConvocatoriaPartidoService {
             "3-5-2", List.of(1, 3, 5, 2),
             "4-2-3-1", List.of(1, 4, 2, 3, 1),
             "4-1-4-1", List.of(1, 4, 1, 4, 1),
-            "4-5-1", List.of(1, 4, 5, 1));
-
-    private static final String FORMACION_INICIAL = "4-4-2";
+            "4-5-1", List.of(1, 4, 5, 1),
+            "2-2", List.of(1, 2, 2),
+            "3-1", List.of(1, 3, 1),
+            "1-2-1", List.of(1, 1, 2, 1),
+            "4-0", List.of(1, 4));
 
     @Transactional(readOnly = true)
     public List<DtoConvocatoriaPartido> listar(long partidoId) {
@@ -113,14 +115,11 @@ public class ConvocatoriaPartidoService {
     @Transactional(readOnly = true)
     public List<DtoFormacionPartido> listarFormaciones(long partidoId) {
         Partido partido = partido(partidoId);
-        Map<Long, String> formacionPorEquipo = new HashMap<>();
-        alineacionDao.findByPartido(partido).forEach(alineacion ->
-                formacionPorEquipo.put(alineacion.getEquipo().getId(), alineacion.getFormacion()));
         return equiposDelPartido(partido).stream()
                 .map(equipo -> new DtoFormacionPartido(
                         equipo.getId(),
                         equipo.getNombre(),
-                        formacionPorEquipo.getOrDefault(equipo.getId(), FORMACION_INICIAL)))
+                        formacionEquipo(partido, equipo)))
                 .toList();
     }
 
@@ -133,7 +132,7 @@ public class ConvocatoriaPartidoService {
         Equipo equipo = equipoDelPartido(partido, equipoId);
         validarEquipoDelDelegado(partido, equipo, usuario);
         validarPermisoAlineacionDurantePartido(partido, usuario);
-        List<Integer> lineas = FORMACIONES.get(formacion);
+        List<Integer> lineas = formacionDisponible(partido, formacion);
         if (lineas == null) {
             throw new IllegalArgumentException("La formación seleccionada no está disponible");
         }
@@ -184,8 +183,9 @@ public class ConvocatoriaPartidoService {
         validarPermisoAlineacionDurantePartido(partido, usuario);
         int totalPosiciones = alineacionDao.findByPartidoAndEquipo(partido, equipoPrimero)
                 .map(AlineacionEquipoPartido::getFormacion)
+                .filter(formacion -> formacionDisponible(partido, formacion) != null)
                 .map(FORMACIONES::get)
-                .orElse(FORMACIONES.get(FORMACION_INICIAL)).stream()
+                .orElse(FORMACIONES.get(formacionInicial(partido))).stream()
                 .mapToInt(Integer::intValue)
                 .sum();
         Map<Long, Integer> posiciones = posicionesEfectivas(partido, equipoPrimero, totalPosiciones);
@@ -213,9 +213,7 @@ public class ConvocatoriaPartidoService {
         Equipo equipo = equipoDeJugadorEnPartido(partido, convocatoria.getJugador());
         validarEquipoDelDelegado(partido, equipo, usuario);
         validarPermisoAlineacionDurantePartido(partido, usuario);
-        String formacion = alineacionDao.findByPartidoAndEquipo(partido, equipo)
-                .map(AlineacionEquipoPartido::getFormacion)
-                .orElse(FORMACION_INICIAL);
+        String formacion = formacionEquipo(partido, equipo);
         List<Integer> lineas = FORMACIONES.get(formacion);
         int posicionesTotales = lineas.stream().mapToInt(Integer::intValue).sum();
         if (posicion < 0 || posicion >= posicionesTotales) {
@@ -248,9 +246,7 @@ public class ConvocatoriaPartidoService {
         sancionService.validarElegibilidad(partido, jugador);
         Equipo equipo = equipoDeJugadorEnPartido(partido, jugador);
         validarEquipoDelDelegado(partido, equipo, usuario);
-        String formacion = alineacionDao.findByPartidoAndEquipo(partido, equipo)
-                .map(AlineacionEquipoPartido::getFormacion)
-                .orElse(FORMACION_INICIAL);
+        String formacion = formacionEquipo(partido, equipo);
         int posicionesTotales = FORMACIONES.get(formacion).stream().mapToInt(Integer::intValue).sum();
         if (posicion < 0 || posicion >= posicionesTotales) {
             throw new IllegalArgumentException("La posición seleccionada no pertenece a la formación actual");
@@ -1143,7 +1139,7 @@ public class ConvocatoriaPartidoService {
                 .map(ConvocatoriaPartido::getPosicionAlineacion)
                 .filter(Objects::nonNull)
                 .collect(java.util.stream.Collectors.toSet());
-        int totalPosiciones = FORMACIONES.get(FORMACION_INICIAL).stream()
+        int totalPosiciones = FORMACIONES.get(formacionInicial(partido)).stream()
                 .mapToInt(Integer::intValue)
                 .sum();
         for (int posicion = 0; posicion < totalPosiciones; posicion++) {
@@ -1152,6 +1148,34 @@ public class ConvocatoriaPartidoService {
             }
         }
         throw new IllegalArgumentException("No hay posiciones disponibles en la formación seleccionada");
+    }
+
+    private String formacionInicial(Partido partido) {
+        String deporte = partido.getTorneo() == null || partido.getTorneo().getDeporte() == null
+                ? null
+                : partido.getTorneo().getDeporte().getNombre();
+        return deporte != null && (deporte.equalsIgnoreCase("Futbol sala")
+                || deporte.equalsIgnoreCase("Fútbol sala")
+                || deporte.equalsIgnoreCase("Futsal"))
+                ? "2-2"
+                : "4-4-2";
+    }
+
+    private String formacionEquipo(Partido partido, Equipo equipo) {
+        return alineacionDao.findByPartidoAndEquipo(partido, equipo)
+                .map(AlineacionEquipoPartido::getFormacion)
+                .filter(formacion -> formacionDisponible(partido, formacion) != null)
+                .orElse(formacionInicial(partido));
+    }
+
+    private List<Integer> formacionDisponible(Partido partido, String formacion) {
+        if (formacion == null) return null;
+        List<Integer> lineas = FORMACIONES.get(formacion);
+        if (lineas == null) return null;
+        int titularesEsperados = partido.getTorneo() != null && partido.getTorneo().getDeporte() != null
+                ? partido.getTorneo().getDeporte().getMaximoTitulares()
+                : 11;
+        return lineas.stream().mapToInt(Integer::intValue).sum() == titularesEsperados ? lineas : null;
     }
 
     private ConvocatoriaPartido convocatoria(long partidoId, long convocatoriaId) {
