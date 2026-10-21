@@ -31,9 +31,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/pagos/**", "/persona/**", "/jugador/**", "/equipo/delegado/**", "/equipo/solicitudes/**",
                             "/equipo/invitaciones-jugador", "/equipo/torneo/*/participaciones",
                             "/equipo/*/participaciones", "/equipo/*/torneos", "/equipo/*/solicitudes-jugador",
-                            "/equipo/*/jugadores/buscar", "/partido/*/convocados", "/partido/*/puede-gestionar",
-                            "/partido/*/jugadores-disponibles/*", "/partido/*/jugador/**",
-                            "/partido/*/eventos", "/partido/*/sanciones/**",
+                            "/equipo/*/jugadores/buscar", "/partido/*/puede-gestionar",
+                            "/partido/*/jugador/**",
                             "/partido/*/solicitudes-sustitucion").authenticated()
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().authenticated())
