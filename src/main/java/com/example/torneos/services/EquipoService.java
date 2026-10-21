@@ -1,12 +1,14 @@
 package com.example.torneos.services;
 
 import com.example.torneos.dao.EquipoDao;
+import com.example.torneos.dao.CiudadDao;
 import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.PersonaDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.entities.Equipo;
+import com.example.torneos.entities.Ciudad;
 import com.example.torneos.entities.Persona;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
@@ -42,6 +44,8 @@ import java.util.Optional;
 public class EquipoService {
     @Autowired
     private EquipoDao equipoDao;
+    @Autowired
+    private CiudadDao ciudadDao;
     @Autowired
     private TorneoDao torneoDao;
     @Autowired
@@ -1008,8 +1012,46 @@ public class EquipoService {
         equipoDB.setEntrenador(equipo.getEntrenador());
         equipoDB.setBandera(equipo.getBandera());
         equipoDB.setEscudo(equipo.getEscudo());
+        if (equipo.getCiudad() != null && equipo.getCiudad().getId() > 0) {
+            Ciudad ciudad = ciudadDao.findById(equipo.getCiudad().getId())
+                    .orElseThrow(() -> new IllegalArgumentException("La ciudad seleccionada no existe"));
+            equipoDB.setCiudad(ciudad);
+        }
         return equipoDao.save(equipoDB);
     }
+
+    @Transactional
+    public Equipo updatePerfilTorneo(long equipoId, long delegadoId, byte[] escudo, Long usuarioId) {
+        Equipo equipo = equipoDao.findById(equipoId)
+                .orElseThrow(() -> new IllegalArgumentException("El equipo no existe"));
+        Usuario usuarioActual = usuarioId == null ? null : usuarioDao.findById(usuarioId).orElse(null);
+        if (usuarioActual == null || usuarioActual.getTipoUsuario() != TipoUsuario.DELEGADO ||
+                equipo.getDelegado() == null || usuarioActual.getNumeroCelular() == null ||
+                !usuarioActual.getNumeroCelular().equals(equipo.getDelegado().getNumeroCelular())) {
+            throw new IllegalArgumentException("Solo el delegado actual del equipo puede modificar este perfil");
+        }
+
+        Persona nuevoDelegado = personaDao.findById(delegadoId)
+                .orElseThrow(() -> new IllegalArgumentException("El delegado seleccionado no existe"));
+        if (nuevoDelegado.getNumeroCelular() == null || nuevoDelegado.getNumeroCelular().isBlank()) {
+            throw new IllegalArgumentException("El delegado seleccionado no tiene un celular asociado");
+        }
+        Usuario cuentaNuevoDelegado = usuarioDao.findByNumeroCelular(nuevoDelegado.getNumeroCelular());
+        if (cuentaNuevoDelegado == null || cuentaNuevoDelegado.getTipoUsuario() != TipoUsuario.DELEGADO) {
+            throw new IllegalArgumentException("La persona seleccionada no tiene una cuenta de delegado");
+        }
+        boolean esDelegadoActual = equipo.getDelegado().getNumeroCelular().equals(nuevoDelegado.getNumeroCelular());
+        if (!esDelegadoActual && equipoDao.existsByDelegado(nuevoDelegado)) {
+            throw new IllegalArgumentException("El delegado seleccionado ya pertenece a otro equipo");
+        }
+
+        equipo.setDelegado(nuevoDelegado);
+        if (escudo != null && escudo.length > 0) {
+            equipo.setEscudo(escudo);
+        }
+        return equipoDao.save(equipo);
+    }
+
     public void delete(long id, long usuarioId) {
         Optional<Equipo> optEquipo = equipoDao.findById(id);
         if (optEquipo.isPresent()) {

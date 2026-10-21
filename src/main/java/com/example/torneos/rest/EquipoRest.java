@@ -199,6 +199,15 @@ public class EquipoRest {
         return equipoService.update(equipo, usuarioId);
     }
 
+    @PutMapping(value = "/{idEquipo}/perfil-torneo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Equipo updatePerfilTorneo(@PathVariable long idEquipo,
+                                     @RequestPart("delegadoId") long delegadoId,
+                                     @Nullable @RequestPart(value = "archivo1", required = false) MultipartFile escudo,
+                                     @AuthenticationPrincipal Long usuarioId) throws IOException {
+        return equipoService.updatePerfilTorneo(idEquipo, delegadoId,
+                escudo == null ? null : escudo.getBytes(), usuarioId);
+    }
+
     @PutMapping("/solicitud/{id}/aceptar")
     @ResponseStatus(HttpStatus.OK)
     public Equipo aceptarSolicitud(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){

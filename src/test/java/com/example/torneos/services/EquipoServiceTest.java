@@ -1,6 +1,7 @@
 package com.example.torneos.services;
 
 import com.example.torneos.dao.EquipoDao;
+import com.example.torneos.dao.CiudadDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.dao.PartidoDao;
@@ -11,6 +12,7 @@ import com.example.torneos.dao.PersonaDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.entities.Equipo;
+import com.example.torneos.entities.Ciudad;
 import com.example.torneos.entities.AyudanteTorneo;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.ParticipacionJugadorTorneo;
@@ -50,6 +52,9 @@ class EquipoServiceTest {
 
     @Mock
     private EquipoDao equipoDao;
+
+    @Mock
+    private CiudadDao ciudadDao;
 
     @Mock
     private TorneoDao torneoDao;
@@ -452,5 +457,63 @@ class EquipoServiceTest {
 
         assertTrue(error.getMessage().contains("no participa"));
         verify(participacionDao, never()).save(any(ParticipacionJugadorTorneo.class));
+    }
+
+    @Test
+    void update_debeGuardarLaCiudadSeleccionada() {
+        Equipo equipoActual = new Equipo();
+        equipoActual.setId(25L);
+        equipoActual.setDelegado(delegado);
+        Equipo cambios = new Equipo();
+        cambios.setId(25L);
+        cambios.setNombre("Equipo Actualizado");
+        cambios.setDelegado(delegado);
+        Ciudad ciudad = new Ciudad();
+        ciudad.setId(7L);
+        cambios.setCiudad(ciudad);
+
+        when(equipoDao.findById(25L)).thenReturn(Optional.of(equipoActual));
+        when(ciudadDao.findById(7L)).thenReturn(Optional.of(ciudad));
+        when(equipoDao.save(any(Equipo.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Equipo resultado = equipoService.update(cambios, 5L);
+
+        assertEquals("Equipo Actualizado", resultado.getNombre());
+        assertSame(ciudad, resultado.getCiudad());
+        verify(equipoDao).save(equipoActual);
+    }
+
+    @Test
+    void updatePerfilTorneo_debePermitirCambiarEscudoYDelegadoDuranteTorneoActivo() {
+        torneo.setEstadoTorneo(EstadoTorneo.ACTIVO);
+        Equipo equipo = new Equipo();
+        equipo.setId(25L);
+        equipo.setNombre("Equipo Actual");
+        equipo.setTorneo(torneo);
+        equipo.setDelegado(delegado);
+
+        Persona nuevoDelegado = new Persona();
+        nuevoDelegado.setId(6L);
+        nuevoDelegado.setNombre("Carlos");
+        nuevoDelegado.setNumeroCelular("3007654321");
+
+        Usuario cuentaNuevoDelegado = new Usuario();
+        cuentaNuevoDelegado.setId(6L);
+        cuentaNuevoDelegado.setTipoUsuario(TipoUsuario.DELEGADO);
+        cuentaNuevoDelegado.setNumeroCelular("3007654321");
+
+        byte[] escudo = new byte[] { 1, 2, 3 };
+        when(equipoDao.findById(25L)).thenReturn(Optional.of(equipo));
+        when(personaDao.findById(6L)).thenReturn(Optional.of(nuevoDelegado));
+        when(usuarioDao.findByNumeroCelular("3007654321")).thenReturn(cuentaNuevoDelegado);
+        when(equipoDao.existsByDelegado(nuevoDelegado)).thenReturn(false);
+        when(equipoDao.save(any(Equipo.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Equipo resultado = equipoService.updatePerfilTorneo(25L, 6L, escudo, 5L);
+
+        assertSame(nuevoDelegado, resultado.getDelegado());
+        assertArrayEquals(escudo, resultado.getEscudo());
+        assertEquals("Equipo Actual", resultado.getNombre());
+        verify(equipoDao).save(equipo);
     }
 }
