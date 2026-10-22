@@ -779,10 +779,19 @@ public class ConvocatoriaPartidoService {
         ModoCambioJugador modo = partido.getTorneo().getModoCambioJugador() == null ? ModoCambioJugador.LIMITADOS : partido.getTorneo().getModoCambioJugador();
         if (modo != ModoCambioJugador.SALIR_ENTRAR && entra.isFueTitular()) throw new IllegalArgumentException("Este suplente ya fue titular y no puede volver a entrar");
         if (modo == ModoCambioJugador.LIMITADOS && partido.getTorneo().getMaximoCambios() > 0 && cambiosDelEquipo(partido, equipoSale) >= partido.getTorneo().getMaximoCambios()) throw new IllegalArgumentException("Se alcanzó el límite de cambios del equipo");
+        Integer posicionSale = sale.getPosicionAlineacion();
+        if (posicionSale == null) {
+            int totalPosiciones = FORMACIONES.get(formacionEquipo(partido, equipoSale)).stream()
+                    .mapToInt(Integer::intValue)
+                    .sum();
+            posicionSale = posicionesEfectivas(partido, equipoSale, totalPosiciones).get(sale.getId());
+        }
         sale.setTitular(false);
+        sale.setPosicionAlineacion(null);
         sale.setCambiosRealizados(sale.getCambiosRealizados() + 1);
         entra.setTitular(true);
         entra.setFueTitular(true);
+        entra.setPosicionAlineacion(posicionSale);
         entra.setCambiosRealizados(entra.getCambiosRealizados() + 1);
         convocatoriaDao.save(sale);
         convocatoriaDao.save(entra);

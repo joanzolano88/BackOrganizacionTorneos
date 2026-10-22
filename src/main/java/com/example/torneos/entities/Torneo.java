@@ -47,5 +47,5 @@ public class Torneo {
     private Ciudad ciudad;
     @JoinColumn
     @ManyToOne
-    private Deporte deporte;
+    private rte deporte;
 }

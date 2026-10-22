@@ -433,6 +433,7 @@ class ConvocatoriaPartidoServiceTest {
     void sustituirJugadorInscrito_agregaAlPartidoJugadorInscritoQueAunNoTeniaConvocatoria() {
         usuarioOrganizador();
         ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);
+        titular.setPosicionAlineacion(2);
         Jugador suplenteInscrito = new Jugador();
         suplenteInscrito.setId(102L);
         suplenteInscrito.setEquipo(local);
@@ -459,6 +460,8 @@ class ConvocatoriaPartidoServiceTest {
         assertTrue(suplenteAgregado.isTitular());
         assertTrue(suplenteAgregado.isFueTitular());
         assertTrue(!titular.isTitular());
+        assertEquals(2, suplenteAgregado.getPosicionAlineacion());
+        assertNull(titular.getPosicionAlineacion());
     }
 
     @Test
