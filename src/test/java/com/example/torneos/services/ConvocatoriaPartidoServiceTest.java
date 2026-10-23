@@ -30,6 +30,7 @@ import com.example.torneos.enums.EstadoJugador;
 import com.example.torneos.enums.TipoUsuario;
 import com.example.torneos.enums.EstadoSolicitudSustitucion;
 import com.example.torneos.enums.TipoEventoPartido;
+import com.example.torneos.enums.ModoRegistroEventoPartido;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -385,6 +386,39 @@ class ConvocatoriaPartidoServiceTest {
 
         assertTrue(evento.isDobleAmarilla());
         assertEquals(TipoEventoPartido.TARJETA_ROJA, evento.getTipo());
+    }
+
+    @Test
+    void registrarGol_modoProfesionalRechazaJugadorSuplente() {
+        usuarioOrganizador();
+        partido.setModoRegistroEventos(ModoRegistroEventoPartido.PROFESIONAL);
+        ConvocatoriaPartido suplente = convocatoria(1L, jugadorLocal, false);
+        when(convocatoriaDao.findByPartidoAndJugador(partido, jugadorLocal)).thenReturn(Optional.of(suplente));
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        DtoRegistrarGol solicitud = new DtoRegistrarGol();
+        solicitud.setEquipoAnotadorId(10L);
+        solicitud.setJugadorId(100L);
+
+        assertThrows(IllegalArgumentException.class, () -> service.registrarGol(5L, solicitud, 99L));
+
+        assertEquals(0, partido.getAnotacionesEquipoLocal());
+        verify(eventoDao, never()).save(any(EventoPartido.class));
+    }
+
+    @Test
+    void registrarEvento_modoProfesionalPermiteTarjetaASuplente() {
+        usuarioOrganizador();
+        partido.setModoRegistroEventos(ModoRegistroEventoPartido.PROFESIONAL);
+        ConvocatoriaPartido suplente = convocatoria(1L, jugadorLocal, false);
+        when(convocatoriaDao.findByPartidoAndJugador(partido, jugadorLocal)).thenReturn(Optional.of(suplente));
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        EventoPartido evento = service.registrarEvento(
+                5L, 100L, TipoEventoPartido.TARJETA_AMARILLA, 70, false, 99L);
+
+        assertEquals(TipoEventoPartido.TARJETA_AMARILLA, evento.getTipo());
+        verify(eventoDao, times(2)).save(any(EventoPartido.class));
     }
 
     @Test

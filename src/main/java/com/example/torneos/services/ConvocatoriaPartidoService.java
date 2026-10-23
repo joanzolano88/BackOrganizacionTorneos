@@ -36,6 +36,7 @@ import com.example.torneos.enums.EstadoSolicitudSustitucion;
 import com.example.torneos.enums.EstadoJugador;
 import com.example.torneos.enums.TipoUsuario;
 import com.example.torneos.enums.TipoEventoPartido;
+import com.example.torneos.enums.ModoRegistroEventoPartido;
 import com.example.torneos.enums.ModoCambioJugador;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -872,6 +873,7 @@ public class ConvocatoriaPartidoService {
         if (dobleAmarilla && tipo != TipoEventoPartido.TARJETA_ROJA) {
             throw new IllegalArgumentException("La doble amarilla solo puede registrarse como tarjeta roja");
         }
+        minuto = minutoActual(partido, minuto);
         EventoPartido evento = guardarEvento(partido, jugador, tipo, minuto);
         evento.setDobleAmarilla(dobleAmarilla);
         evento = eventoDao.save(evento);
@@ -889,12 +891,14 @@ public class ConvocatoriaPartidoService {
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Los goles solo se pueden registrar durante el partido");
         }
+        solicitud.setMinuto(minutoActual(partido, solicitud.getMinuto()));
         if (solicitud.getMinuto() < 0) {
             throw new IllegalArgumentException("El minuto del gol no puede ser negativo");
         }
 
         Equipo equipoAnotador = equipoParticipante(partido, solicitud.getEquipoAnotadorId());
         Jugador jugador = jugadorConvocado(partido, solicitud.getJugadorId());
+        validarJugadorTitularEnModoProfesional(partido, jugador);
         Equipo equipoJugador = equipoDeJugadorEnPartido(partido, jugador);
         if (equipoJugador == null) {
             throw new IllegalArgumentException("El jugador no pertenece a un equipo");
@@ -921,6 +925,7 @@ public class ConvocatoriaPartidoService {
             gol.setPenalti(solicitud.isPenalti());
             if (solicitud.getAsistenciaId() != null) {
                 Jugador asistente = jugadorConvocado(partido, solicitud.getAsistenciaId());
+                validarJugadorTitularEnModoProfesional(partido, asistente);
                 if (!Objects.equals(equipoDeJugadorEnPartido(partido, asistente).getId(), equipoAnotador.getId())) {
                     throw new IllegalArgumentException("La asistencia debe pertenecer al equipo que anota");
                 }
@@ -938,6 +943,29 @@ public class ConvocatoriaPartidoService {
             partido.setAnotacionesEquipoVisitante(partido.getAnotacionesEquipoVisitante() + 1);
         }
         return partidoDao.save(partido);
+    }
+
+    private void validarJugadorTitularEnModoProfesional(Partido partido, Jugador jugador) {
+        if (partido.getModoRegistroEventos() != ModoRegistroEventoPartido.PROFESIONAL) return;
+        boolean titular = convocatoriaDao.findByPartidoAndJugador(partido, jugador)
+                .map(ConvocatoriaPartido::isTitular)
+                .orElse(false);
+        if (!titular) {
+            throw new IllegalArgumentException("En el modo profesional, los goles y asistencias solo se registran para titulares");
+        }
+    }
+
+    private int minutoActual(Partido partido, int minutoSolicitado) {
+        if (!partido.isControlTiempoActivo() || partido.getInicioPeriodoActual() == null ||
+                partido.getPeriodoActual() == null) return minutoSolicitado;
+        int limite = switch (partido.getPeriodoActual()) {
+            case PRIMER_TIEMPO, SEGUNDO_TIEMPO -> 45;
+            case PRIMER_TIEMPO_EXTRA, SEGUNDO_TIEMPO_EXTRA -> 15;
+            default -> 0;
+        };
+        if (limite == 0) return minutoSolicitado;
+        long transcurridos = java.time.Duration.between(partido.getInicioPeriodoActual(), java.time.Instant.now()).toMinutes();
+        return partido.getMinutoBasePeriodo() + (int) Math.min(Math.max(transcurridos, 0), limite);
     }
 
     private Equipo equipoParticipante(Partido partido, Long equipoId) {

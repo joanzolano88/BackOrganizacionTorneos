@@ -8,6 +8,7 @@ import com.example.torneos.entities.Partido;
 import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadTorneo;
+import com.example.torneos.enums.ModoRegistroEventoPartido;
 import com.example.torneos.services.PartidoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -102,8 +103,22 @@ public class PartidoRest {
         return partidoService.sumarGol(partido, usuarioId);
     }
     @PutMapping("iniciar/{id}")
-    public Partido iniciarPartido(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){
-        return partidoService.iniciarPartido(id, usuarioId);
+    public Partido iniciarPartido(@PathVariable long id,
+                                  @RequestParam(defaultValue = "SIMPLE") ModoRegistroEventoPartido modoRegistroEventos,
+                                  @RequestParam(defaultValue = "false") boolean controlTiempoActivo,
+                                  @AuthenticationPrincipal Long usuarioId){
+        return partidoService.iniciarPartido(id, usuarioId, modoRegistroEventos, controlTiempoActivo);
+    }
+    @PutMapping("{id}/periodo/iniciar")
+    public Partido iniciarSiguientePeriodo(@PathVariable long id, @AuthenticationPrincipal Long usuarioId) {
+        return partidoService.iniciarSiguientePeriodo(id, usuarioId);
+    }
+    @PutMapping("{id}/periodo/cerrar")
+    public Partido cerrarPeriodo(@PathVariable long id,
+                                 @RequestParam(defaultValue = "0") int alargue,
+                                 @RequestParam(defaultValue = "") String continuacion,
+                                 @AuthenticationPrincipal Long usuarioId) {
+        return partidoService.cerrarPeriodo(id, alargue, continuacion, usuarioId);
     }
     @PutMapping("terminar/{id}")
     public Partido terminarPartido(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){

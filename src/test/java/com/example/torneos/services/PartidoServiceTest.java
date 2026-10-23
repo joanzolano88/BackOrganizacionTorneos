@@ -4,6 +4,7 @@ import com.example.torneos.dao.ParticipacionEquipoTorneoDao;
 import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
+import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.ParticipacionEquipoTorneo;
 import com.example.torneos.entities.Partido;
@@ -13,6 +14,7 @@ import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadFase;
 import com.example.torneos.enums.ModalidadTorneo;
+import com.example.torneos.enums.PeriodoPartido;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +41,7 @@ class PartidoServiceTest {
     @Mock private ParticipacionEquipoTorneoDao participacionEquipoDao;
     @Mock private TorneoDao torneoDao;
     @Mock private UsuarioDao usuarioDao;
+    @Mock private AyudanteTorneoDao ayudanteTorneoDao;
 
     @InjectMocks
     private PartidoService partidoService;
@@ -45,6 +49,7 @@ class PartidoServiceTest {
     private Torneo torneo;
     private Equipo equipoLocal;
     private Equipo equipoVisitante;
+    private Usuario organizador;
 
     @BeforeEach
     void configurarPartidoDeEliminatoriasIdaYVuelta() {
@@ -54,7 +59,7 @@ class PartidoServiceTest {
         torneo.setModalidadTorneo(ModalidadTorneo.ELIMINATORIAS);
         torneo.setModalidadGrupos(ModalidadFase.PARTIDO_UNICO);
         torneo.setModalidadEliminatorias(ModalidadFase.IDA_VUELTA);
-        Usuario organizador = new Usuario();
+        organizador = new Usuario();
         organizador.setId(7L);
         torneo.setEncargadoTorneo(organizador);
 
@@ -66,9 +71,10 @@ class PartidoServiceTest {
         ParticipacionEquipoTorneo participacionLocal = crearParticipacion(equipoLocal);
         ParticipacionEquipoTorneo participacionVisitante = crearParticipacion(equipoVisitante);
 
-        when(torneoDao.findById(10L)).thenReturn(Optional.of(torneo));
+        lenient().when(torneoDao.findById(10L)).thenReturn(Optional.of(torneo));
         when(usuarioDao.findById(7L)).thenReturn(Optional.of(organizador));
-        when(participacionEquipoDao.findByTorneoAndEstadoAndFaseActual(torneo, "ACEPTADO", FaseActual.SEMIFINAL))
+        lenient().when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, organizador)).thenReturn(Optional.empty());
+        lenient().when(participacionEquipoDao.findByTorneoAndEstadoAndFaseActual(torneo, "ACEPTADO", FaseActual.SEMIFINAL))
                 .thenReturn(List.of(participacionLocal, participacionVisitante));
         lenient().when(participacionEquipoDao.findByEquipoAndTorneo(equipoLocal, torneo)).thenReturn(Optional.of(participacionLocal));
         lenient().when(participacionEquipoDao.findByEquipoAndTorneo(equipoVisitante, torneo)).thenReturn(Optional.of(participacionVisitante));
@@ -103,6 +109,38 @@ class PartidoServiceTest {
 
         assertEquals(0, partidos.size());
         verify(partidoDao, never()).save(any(Partido.class));
+    }
+
+    @Test
+    void cerrarPeriodos_debeUsarDuracionesDelTorneoSinAcumularAlargues() {
+        torneo.setDuracionTiempoMinutos(40);
+        torneo.setDuracionTiempoExtraMinutos(10);
+        Partido partido = new Partido();
+        partido.setId(5L);
+        partido.setTorneo(torneo);
+        partido.setEstadoPartido(EstadoPartido.EN_PROCESO);
+        partido.setControlTiempoActivo(true);
+        partido.setInicioPeriodoActual(Instant.now());
+        partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO);
+        when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
+
+        partidoService.cerrarPeriodo(5L, 3, "", 7L);
+        assertEquals(40, partido.getMinutoBasePeriodo());
+
+        partido.setPeriodoActual(PeriodoPartido.SEGUNDO_TIEMPO);
+        partido.setInicioPeriodoActual(Instant.now());
+        partidoService.cerrarPeriodo(5L, 5, "PRORROGA", 7L);
+        assertEquals(80, partido.getMinutoBasePeriodo());
+
+        partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO_EXTRA);
+        partido.setInicioPeriodoActual(Instant.now());
+        partidoService.cerrarPeriodo(5L, 2, "", 7L);
+        assertEquals(90, partido.getMinutoBasePeriodo());
+
+        partido.setPeriodoActual(PeriodoPartido.SEGUNDO_TIEMPO_EXTRA);
+        partido.setInicioPeriodoActual(Instant.now());
+        partidoService.cerrarPeriodo(5L, 4, "PENALTIS", 7L);
+        assertEquals(100, partido.getMinutoBasePeriodo());
     }
 
     private ParticipacionEquipoTorneo crearParticipacion(Equipo equipo) {
