@@ -476,7 +476,7 @@ public class ConvocatoriaPartidoService {
     public void sustituirJugadorInscrito(
             long partidoId, long titularId, long jugadorId, int numeroUniforme, int minuto, long usuarioId) {
         Partido partido = partido(partidoId);
-        validarGestorOrganizador(partido, usuario(usuarioId));
+        validarGestorRegistroEventos(partido, usuario(usuarioId));
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO || minuto < 0) {
             throw new IllegalArgumentException("Las sustituciones solo se pueden registrar durante el partido y con minuto no negativo");
         }
@@ -861,7 +861,7 @@ public class ConvocatoriaPartidoService {
             long partidoId, long jugadorId, TipoEventoPartido tipo, int minuto,
             boolean dobleAmarilla, long usuarioId) {
         Partido partido = partido(partidoId);
-        validarGestorOrganizador(partido, usuario(usuarioId));
+        validarGestorRegistroEventos(partido, usuario(usuarioId));
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Los goles y tarjetas solo se pueden registrar durante el partido");
         }
@@ -887,7 +887,7 @@ public class ConvocatoriaPartidoService {
     @Transactional
     public Partido registrarGol(long partidoId, DtoRegistrarGol solicitud, long usuarioId) {
         Partido partido = partido(partidoId);
-        validarGestorOrganizador(partido, usuario(usuarioId));
+        validarGestorRegistroEventos(partido, usuario(usuarioId));
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Los goles solo se pueden registrar durante el partido");
         }
@@ -1239,11 +1239,19 @@ public class ConvocatoriaPartidoService {
     }
 
     private void validarGestorOrganizador(Partido partido, Usuario usuario) {
+        validarEsOrganizadorOAyudante(partido, usuario);
+        validarNoJugador(partido, usuario);
+    }
+
+    private void validarGestorRegistroEventos(Partido partido, Usuario usuario) {
+        validarEsOrganizadorOAyudante(partido, usuario);
+    }
+
+    private void validarEsOrganizadorOAyudante(Partido partido, Usuario usuario) {
         boolean propietario = partido.getTorneo().getEncargadoTorneo() != null &&
                 partido.getTorneo().getEncargadoTorneo().getId() == usuario.getId();
         boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), usuario).isPresent();
         if (!propietario && !ayudante) throw new IllegalArgumentException("Solo el organizador o un ayudante puede gestionar el partido");
-        validarNoJugador(partido, usuario);
     }
 
     private void validarNoJugador(Partido partido, Usuario usuario) {

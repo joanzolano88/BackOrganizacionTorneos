@@ -5,9 +5,14 @@ import com.example.torneos.dao.PartidoDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.UsuarioDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
+import com.example.torneos.dao.JugadorDao;
+import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.ParticipacionEquipoTorneo;
 import com.example.torneos.entities.Partido;
+import com.example.torneos.entities.Jugador;
+import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
@@ -25,6 +30,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -40,6 +46,9 @@ class PartidoServiceTest {
     @Mock private TorneoDao torneoDao;
     @Mock private UsuarioDao usuarioDao;
     @Mock private AyudanteTorneoDao ayudanteTorneoDao;
+    @Mock private JugadorDao jugadorDao;
+    @Mock private ParticipacionJugadorTorneoDao participacionJugadorDao;
+    @Mock private ConvocatoriaPartidoDao convocatoriaDao;
 
     @InjectMocks
     private PartidoService partidoService;
@@ -70,7 +79,7 @@ class PartidoServiceTest {
         ParticipacionEquipoTorneo participacionVisitante = crearParticipacion(equipoVisitante);
 
         lenient().when(torneoDao.findById(10L)).thenReturn(Optional.of(torneo));
-        when(usuarioDao.findById(7L)).thenReturn(Optional.of(organizador));
+        lenient().when(usuarioDao.findById(7L)).thenReturn(Optional.of(organizador));
         lenient().when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, organizador)).thenReturn(Optional.empty());
         lenient().when(participacionEquipoDao.findByTorneoAndEstadoAndFaseActual(torneo, "ACEPTADO", FaseActual.SEMIFINAL))
                 .thenReturn(List.of(participacionLocal, participacionVisitante));
@@ -107,6 +116,30 @@ class PartidoServiceTest {
 
         assertEquals(0, partidos.size());
         verify(partidoDao, never()).save(any(Partido.class));
+    }
+
+    @Test
+    void puedeGestionarPartido_permiteAyudanteAunqueParticipeEnElPartido() {
+        Usuario ayudante = new Usuario();
+        ayudante.setId(8L);
+        ayudante.setIdentificacion("AYUDANTE-8");
+        Partido partido = new Partido();
+        partido.setTorneo(torneo);
+        partido.setEquipoLocal(equipoLocal);
+        partido.setEquipoVisitante(equipoVisitante);
+        Jugador jugador = new Jugador();
+        jugador.setId(80L);
+
+        when(partidoDao.findById(30L)).thenReturn(Optional.of(partido));
+        when(usuarioDao.findById(8L)).thenReturn(Optional.of(ayudante));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, ayudante))
+                .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
+        lenient().when(jugadorDao.findByIdentificacion("AYUDANTE-8")).thenReturn(Optional.of(jugador));
+        lenient().when(participacionJugadorDao.findByTorneoAndJugador(torneo, jugador)).thenReturn(Optional.empty());
+        lenient().when(convocatoriaDao.findByPartidoAndJugador(partido, jugador))
+                .thenReturn(Optional.of(new ConvocatoriaPartido()));
+
+        assertTrue(partidoService.puedeGestionarPartido(30L, 8L));
     }
 
     private ParticipacionEquipoTorneo crearParticipacion(Equipo equipo) {

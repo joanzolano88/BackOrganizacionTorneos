@@ -710,7 +710,7 @@ public class PartidoService {
     public Partido iniciarPartido(long id, long usuarioId, ModoRegistroEventoPartido modoRegistroEventos) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
-        validarGestorPartido(partido, usuarioId);
+        validarGestorPartidoParaEventos(partido, usuarioId);
         if (modoRegistroEventos == null) throw new IllegalArgumentException("Selecciona el modo de registro de eventos");
         if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO) {
             throw new IllegalArgumentException("Solo se puede iniciar un partido programado");
@@ -750,7 +750,7 @@ public class PartidoService {
     public Partido terminarPartido(long id, long usuarioId) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
-        validarGestorPartido(partido, usuarioId);
+        validarGestorPartidoParaEventos(partido, usuarioId);
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Solo se puede terminar un partido en proceso");
         }
@@ -766,7 +766,7 @@ public class PartidoService {
     public Partido terminarPartidoPenaltis(long id, String gandor, long usuarioId) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
-        validarGestorPartido(partido, usuarioId);
+        validarGestorPartidoParaEventos(partido, usuarioId);
         if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Solo se pueden registrar penaltis en un partido en proceso");
         }
@@ -828,7 +828,7 @@ public class PartidoService {
     public boolean puedeGestionarPartido(long partidoId, long usuarioId) {
         Partido partido = partidoDao.findById(partidoId).orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
         try {
-            validarGestorPartido(partido, usuarioId);
+            validarGestorPartidoParaEventos(partido, usuarioId);
             return true;
         } catch (IllegalArgumentException error) {
             return false;
@@ -837,13 +837,10 @@ public class PartidoService {
 
     private void validarGestorPartido(Partido partido, long usuarioId) {
         Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
-        Torneo torneo = partido.getTorneo();
-        boolean propietario = torneo.getEncargadoTorneo() != null && torneo.getEncargadoTorneo().getId() == usuarioId;
-        boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(torneo, usuario).isPresent();
-        if (!propietario && !ayudante) throw new IllegalArgumentException("Solo el organizador o un ayudante autorizado puede gestionar partidos");
+        validarEsOrganizadorOAyudante(partido, usuario);
         if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) return;
         jugadorDao.findByIdentificacion(usuario.getIdentificacion()).ifPresent(jugador -> {
-            boolean porParticipacion = participacionDao.findByTorneoAndJugador(torneo, jugador)
+            boolean porParticipacion = participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador)
                     .map(item -> partido.getEquipoLocal() != null && item.getEquipo().getId() == partido.getEquipoLocal().getId()
                             || partido.getEquipoVisitante() != null && item.getEquipo().getId() == partido.getEquipoVisitante().getId())
                     .orElse(false);
@@ -855,6 +852,18 @@ public class PartidoService {
                 throw new IllegalArgumentException("Un jugador de este partido no puede gestionarlo; debe hacerlo otro ayudante");
             }
         });
+    }
+
+    private void validarGestorPartidoParaEventos(Partido partido, long usuarioId) {
+        Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        validarEsOrganizadorOAyudante(partido, usuario);
+    }
+
+    private void validarEsOrganizadorOAyudante(Partido partido, Usuario usuario) {
+        Torneo torneo = partido.getTorneo();
+        boolean propietario = torneo.getEncargadoTorneo() != null && torneo.getEncargadoTorneo().getId() == usuario.getId();
+        boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(torneo, usuario).isPresent();
+        if (!propietario && !ayudante) throw new IllegalArgumentException("Solo el organizador o un ayudante autorizado puede gestionar partidos");
     }
 
     private void validarPropietarioTorneo(Torneo torneo, long usuarioId) {

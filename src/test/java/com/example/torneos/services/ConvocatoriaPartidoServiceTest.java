@@ -389,6 +389,25 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void registrarEvento_permiteAyudanteDelTorneoAunqueParticipeEnElPartido() {
+        Usuario ayudante = new Usuario();
+        ayudante.setId(88L);
+        ayudante.setIdentificacion("AYUDANTE-88");
+        when(usuarioDao.findById(88L)).thenReturn(Optional.of(ayudante));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), ayudante))
+                .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
+        lenient().when(jugadorDao.findByIdentificacion("AYUDANTE-88")).thenReturn(Optional.of(jugadorLocal));
+        convocar(jugadorLocal);
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        EventoPartido evento = service.registrarEvento(
+                5L, 100L, TipoEventoPartido.TARJETA_AMARILLA, 12, false, 88L);
+
+        assertEquals(TipoEventoPartido.TARJETA_AMARILLA, evento.getTipo());
+    }
+
+    @Test
     void registrarGol_modoProfesionalRechazaJugadorSuplente() {
         usuarioOrganizador();
         partido.setModoRegistroEventos(ModoRegistroEventoPartido.PROFESIONAL);
