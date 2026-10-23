@@ -41,7 +41,7 @@ public class Partido {
     private boolean controlTiempoActivo;
     @Enumerated(EnumType.STRING)
     private PeriodoPartido periodoActual;
-    private Instant inicioPeriodoActual;
+    private Date inicioPeriodoActual;
     private int minutoBasePeriodo;
     private int alarguePrimerTiempo;
     private int alargueSegundoTiempo;
