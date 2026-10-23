@@ -348,8 +348,8 @@ public class ConvocatoriaPartidoService {
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
         validarEstadoEditable(partido);
-        if (partido.getEstadoPartido() == EstadoPartido.EN_PROCESO) {
-            throw new IllegalArgumentException("Durante el partido solo puedes agregar un jugador para ocupar una posición vacía");
+        if (partido.getEstadoPartido() == EstadoPartido.EN_PROCESO && titular) {
+            throw new IllegalArgumentException("Durante el partido solo puedes agregar jugadores como suplentes convocados");
         }
         Jugador jugador = jugadorDao.findById(jugadorId)
                 .orElseThrow(() -> new IllegalArgumentException("El jugador no existe"));
@@ -1121,8 +1121,10 @@ public class ConvocatoriaPartidoService {
     }
 
     private void validarEstadoEditable(Partido partido) {
-        if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO && partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
-            throw new IllegalArgumentException("La lista solo se puede modificar cuando el partido está programado o en proceso");
+        if (partido.getEstadoPartido() != EstadoPartido.PENDIENTE &&
+                partido.getEstadoPartido() != EstadoPartido.PROGRAMADO &&
+                partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("La lista solo se puede modificar antes del partido o mientras está en proceso");
         }
     }
 
@@ -1138,7 +1140,6 @@ public class ConvocatoriaPartidoService {
                 partido.getTorneo().getEncargadoTorneo().getId() == usuario.getId();
         boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), usuario).isPresent();
         if (propietario || ayudante) {
-            validarNoJugador(partido, usuario);
             return;
         }
         if (usuario.getTipoUsuario() == TipoUsuario.DELEGADO && esDelegadoDeEquipo(partido.getEquipoLocal(), usuario) || usuario.getTipoUsuario() == TipoUsuario.DELEGADO && esDelegadoDeEquipo(partido.getEquipoVisitante(), usuario)) {

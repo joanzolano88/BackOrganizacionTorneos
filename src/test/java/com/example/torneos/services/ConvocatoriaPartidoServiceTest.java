@@ -458,6 +458,21 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void agregarSuplente_permiteConvocarAntesDeProgramarElPartido() {
+        usuarioOrganizador();
+        partido.setEstadoPartido(EstadoPartido.PENDIENTE);
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConvocatoriaPartido convocatoria = service.agregar(5L, 100L, false, null, 99L);
+
+        assertEquals(jugadorLocal, convocatoria.getJugador());
+        assertTrue(!convocatoria.isTitular());
+        verify(convocatoriaDao).save(any(ConvocatoriaPartido.class));
+    }
+
+    @Test
     void agregarTitular_requiereNumeroUniforme() {
         usuarioOrganizador();
         partido.setEstadoPartido(EstadoPartido.PROGRAMADO);
@@ -472,13 +487,31 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
-    void agregar_rechazaAltasGenericasCuandoElPartidoYaEstaEnProceso() {
+    void agregar_permiteConvocarComoSuplenteDuranteElPartido() {
+        usuarioOrganizador();
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorLocal))
+                .thenReturn(Optional.of(participacion(jugadorLocal, local)));
+        when(jugadorDao.findById(jugadorLocal.getId())).thenReturn(Optional.of(jugadorLocal));
+        when(convocatoriaDao.findByPartidoAndJugador(partido, jugadorLocal)).thenReturn(Optional.empty());
+        when(convocatoriaDao.countByPartidoAndJugadorEquipo(partido, local)).thenReturn(2L);
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConvocatoriaPartido agregada = service.agregar(5L, jugadorLocal.getId(), false, null, 99L);
+
+        assertEquals(jugadorLocal, agregada.getJugador());
+        assertTrue(!agregada.isTitular());
+        assertEquals(partido, agregada.getPartido());
+        verify(eventoDao, never()).save(any(EventoPartido.class));
+    }
+
+    @Test
+    void agregar_rechazaNuevoTitularDuranteElPartido() {
         usuarioOrganizador();
 
         assertThrows(IllegalArgumentException.class,
-                () -> service.agregar(5L, jugadorLocal.getId(), false, null, 99L));
+                () -> service.agregar(5L, jugadorLocal.getId(), true, 10, 99L));
 
-        verify(jugadorDao, never()).findById(jugadorLocal.getId());
         verify(convocatoriaDao, never()).save(any(ConvocatoriaPartido.class));
     }
 
