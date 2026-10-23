@@ -24,7 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
-import java.time.Instant;
+import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -120,7 +120,7 @@ class PartidoServiceTest {
         partido.setTorneo(torneo);
         partido.setEstadoPartido(EstadoPartido.EN_PROCESO);
         partido.setControlTiempoActivo(true);
-        partido.setInicioPeriodoActual(Instant.now());
+        partido.setInicioPeriodoActual(new Date());
         partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO);
         when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
 
@@ -128,17 +128,17 @@ class PartidoServiceTest {
         assertEquals(40, partido.getMinutoBasePeriodo());
 
         partido.setPeriodoActual(PeriodoPartido.SEGUNDO_TIEMPO);
-        partido.setInicioPeriodoActual(Instant.now());
+        partido.setInicioPeriodoActual(new Date());
         partidoService.cerrarPeriodo(5L, 5, "PRORROGA", 7L);
         assertEquals(80, partido.getMinutoBasePeriodo());
 
         partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO_EXTRA);
-        partido.setInicioPeriodoActual(Instant.now());
+        partido.setInicioPeriodoActual(new Date());
         partidoService.cerrarPeriodo(5L, 2, "", 7L);
         assertEquals(90, partido.getMinutoBasePeriodo());
 
         partido.setPeriodoActual(PeriodoPartido.SEGUNDO_TIEMPO_EXTRA);
-        partido.setInicioPeriodoActual(Instant.now());
+        partido.setInicioPeriodoActual(new Date());
         partidoService.cerrarPeriodo(5L, 4, "PENALTIS", 7L);
         assertEquals(100, partido.getMinutoBasePeriodo());
     }

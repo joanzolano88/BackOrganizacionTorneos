@@ -753,7 +753,7 @@ public class PartidoService {
         partido.setMinutoBasePeriodo(0);
         if (controlTiempoActivo) {
             partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO);
-            partido.setInicioPeriodoActual(Instant.now());
+            partido.setInicioPeriodoActual(new Date());
             partido.setMinutoBasePeriodo(0);
         }
         return partidoDao.save(partido);
@@ -774,7 +774,7 @@ public class PartidoService {
             default -> throw new IllegalArgumentException("El partido no está en un descanso válido");
         };
         partido.setPeriodoActual(siguiente);
-        partido.setInicioPeriodoActual(Instant.now());
+        partido.setInicioPeriodoActual(new Date());
         return partidoDao.save(partido);
     }
 
@@ -852,7 +852,7 @@ public class PartidoService {
         if (partido == null || !partido.isControlTiempoActivo() ||
                 partido.getInicioPeriodoActual() == null || partido.getPeriodoActual() == null) return 0;
         int transcurridos = (int) java.time.Duration.between(
-                partido.getInicioPeriodoActual(), Instant.now()).toMinutes();
+                partido.getInicioPeriodoActual().toInstant(), Instant.now()).toMinutes();
         boolean periodoActivo = switch (partido.getPeriodoActual()) {
             case PRIMER_TIEMPO, SEGUNDO_TIEMPO, PRIMER_TIEMPO_EXTRA, SEGUNDO_TIEMPO_EXTRA -> true;
             default -> false;

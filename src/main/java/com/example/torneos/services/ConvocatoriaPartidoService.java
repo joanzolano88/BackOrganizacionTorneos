@@ -964,7 +964,8 @@ public class ConvocatoriaPartidoService {
             default -> 0;
         };
         if (limite == 0) return minutoSolicitado;
-        long transcurridos = java.time.Duration.between(partido.getInicioPeriodoActual(), java.time.Instant.now()).toMinutes();
+        long transcurridos = java.time.Duration.between(
+                partido.getInicioPeriodoActual().toInstant(), java.time.Instant.now()).toMinutes();
         return partido.getMinutoBasePeriodo() + (int) Math.min(Math.max(transcurridos, 0), limite);
     }
 
