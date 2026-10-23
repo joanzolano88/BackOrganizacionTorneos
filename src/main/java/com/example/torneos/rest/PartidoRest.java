@@ -105,20 +105,8 @@ public class PartidoRest {
     @PutMapping("iniciar/{id}")
     public Partido iniciarPartido(@PathVariable long id,
                                   @RequestParam(defaultValue = "SIMPLE") ModoRegistroEventoPartido modoRegistroEventos,
-                                  @RequestParam(defaultValue = "false") boolean controlTiempoActivo,
                                   @AuthenticationPrincipal Long usuarioId){
-        return partidoService.iniciarPartido(id, usuarioId, modoRegistroEventos, controlTiempoActivo);
-    }
-    @PutMapping("{id}/periodo/iniciar")
-    public Partido iniciarSiguientePeriodo(@PathVariable long id, @AuthenticationPrincipal Long usuarioId) {
-        return partidoService.iniciarSiguientePeriodo(id, usuarioId);
-    }
-    @PutMapping("{id}/periodo/cerrar")
-    public Partido cerrarPeriodo(@PathVariable long id,
-                                 @RequestParam(defaultValue = "0") int alargue,
-                                 @RequestParam(defaultValue = "") String continuacion,
-                                 @AuthenticationPrincipal Long usuarioId) {
-        return partidoService.cerrarPeriodo(id, alargue, continuacion, usuarioId);
+        return partidoService.iniciarPartido(id, usuarioId, modoRegistroEventos);
     }
     @PutMapping("terminar/{id}")
     public Partido terminarPartido(@PathVariable long id, @AuthenticationPrincipal Long usuarioId){

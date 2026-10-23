@@ -26,8 +26,6 @@ public class Torneo {
     private int cantidadGruposEliminatoriaGrupos;
     private int cantidadEquiposEliminatoriaGrupos;
     private int duracionMinutos;
-    private int duracionTiempoMinutos = 45;
-    private int duracionTiempoExtraMinutos = 15;
     private long valorInscripcion;
     private FaseActual faseTorneo;
     private EstadoTorneo estadoTorneo;

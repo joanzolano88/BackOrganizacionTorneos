@@ -14,7 +14,6 @@ import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadFase;
 import com.example.torneos.enums.ModalidadTorneo;
-import com.example.torneos.enums.PeriodoPartido;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +23,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -109,38 +107,6 @@ class PartidoServiceTest {
 
         assertEquals(0, partidos.size());
         verify(partidoDao, never()).save(any(Partido.class));
-    }
-
-    @Test
-    void cerrarPeriodos_debeUsarDuracionesDelTorneoSinAcumularAlargues() {
-        torneo.setDuracionTiempoMinutos(40);
-        torneo.setDuracionTiempoExtraMinutos(10);
-        Partido partido = new Partido();
-        partido.setId(5L);
-        partido.setTorneo(torneo);
-        partido.setEstadoPartido(EstadoPartido.EN_PROCESO);
-        partido.setControlTiempoActivo(true);
-        partido.setInicioPeriodoActual(new Date());
-        partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO);
-        when(partidoDao.findById(5L)).thenReturn(Optional.of(partido));
-
-        partidoService.cerrarPeriodo(5L, 3, "", 7L);
-        assertEquals(40, partido.getMinutoBasePeriodo());
-
-        partido.setPeriodoActual(PeriodoPartido.SEGUNDO_TIEMPO);
-        partido.setInicioPeriodoActual(new Date());
-        partidoService.cerrarPeriodo(5L, 5, "PRORROGA", 7L);
-        assertEquals(80, partido.getMinutoBasePeriodo());
-
-        partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO_EXTRA);
-        partido.setInicioPeriodoActual(new Date());
-        partidoService.cerrarPeriodo(5L, 2, "", 7L);
-        assertEquals(90, partido.getMinutoBasePeriodo());
-
-        partido.setPeriodoActual(PeriodoPartido.SEGUNDO_TIEMPO_EXTRA);
-        partido.setInicioPeriodoActual(new Date());
-        partidoService.cerrarPeriodo(5L, 4, "PENALTIS", 7L);
-        assertEquals(100, partido.getMinutoBasePeriodo());
     }
 
     private ParticipacionEquipoTorneo crearParticipacion(Equipo equipo) {

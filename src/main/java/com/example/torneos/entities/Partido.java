@@ -3,7 +3,6 @@ package com.example.torneos.entities;
 import com.example.torneos.enums.EstadoPartido;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModoRegistroEventoPartido;
-import com.example.torneos.enums.PeriodoPartido;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -38,15 +37,6 @@ public class Partido {
     private int llaveEliminatoria;
     @Enumerated(EnumType.STRING)
     private ModoRegistroEventoPartido modoRegistroEventos = ModoRegistroEventoPartido.SIMPLE;
-    private boolean controlTiempoActivo;
-    @Enumerated(EnumType.STRING)
-    private PeriodoPartido periodoActual;
-    private Date inicioPeriodoActual;
-    private int minutoBasePeriodo;
-    private int alarguePrimerTiempo;
-    private int alargueSegundoTiempo;
-    private int alarguePrimerTiempoExtra;
-    private int alargueSegundoTiempoExtra;
     @JoinColumn
     @ManyToOne
     private Cancha cancha;

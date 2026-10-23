@@ -956,17 +956,7 @@ public class ConvocatoriaPartidoService {
     }
 
     private int minutoActual(Partido partido, int minutoSolicitado) {
-        if (!partido.isControlTiempoActivo() || partido.getInicioPeriodoActual() == null ||
-                partido.getPeriodoActual() == null) return minutoSolicitado;
-        int limite = switch (partido.getPeriodoActual()) {
-            case PRIMER_TIEMPO, SEGUNDO_TIEMPO -> 45;
-            case PRIMER_TIEMPO_EXTRA, SEGUNDO_TIEMPO_EXTRA -> 15;
-            default -> 0;
-        };
-        if (limite == 0) return minutoSolicitado;
-        long transcurridos = java.time.Duration.between(
-                partido.getInicioPeriodoActual().toInstant(), java.time.Instant.now()).toMinutes();
-        return partido.getMinutoBasePeriodo() + (int) Math.min(Math.max(transcurridos, 0), limite);
+        return minutoSolicitado;
     }
 
     private Equipo equipoParticipante(Partido partido, Long equipoId) {

@@ -25,7 +25,6 @@ import com.example.torneos.enums.FaseActual;
 import com.example.torneos.enums.ModalidadFase;
 import com.example.torneos.enums.ModalidadTorneo;
 import com.example.torneos.enums.ModoRegistroEventoPartido;
-import com.example.torneos.enums.PeriodoPartido;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -705,11 +704,10 @@ public class PartidoService {
         throw new IllegalArgumentException("El partido no esta en juego");
     }
     public Partido iniciarPartido(long id, long usuarioId) {
-        return iniciarPartido(id, usuarioId, ModoRegistroEventoPartido.SIMPLE, false);
+        return iniciarPartido(id, usuarioId, ModoRegistroEventoPartido.SIMPLE);
     }
 
-    public Partido iniciarPartido(
-            long id, long usuarioId, ModoRegistroEventoPartido modoRegistroEventos, boolean controlTiempoActivo) {
+    public Partido iniciarPartido(long id, long usuarioId, ModoRegistroEventoPartido modoRegistroEventos) {
         Partido partido = partidoDao.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
         validarGestorPartido(partido, usuarioId);
@@ -747,117 +745,7 @@ public class PartidoService {
         }
         partido.setEstadoPartido(EstadoPartido.EN_PROCESO);
         partido.setModoRegistroEventos(modoRegistroEventos);
-        partido.setControlTiempoActivo(controlTiempoActivo);
-        partido.setPeriodoActual(null);
-        partido.setInicioPeriodoActual(null);
-        partido.setMinutoBasePeriodo(0);
-        if (controlTiempoActivo) {
-            partido.setPeriodoActual(PeriodoPartido.PRIMER_TIEMPO);
-            partido.setInicioPeriodoActual(new Date());
-            partido.setMinutoBasePeriodo(0);
-        }
         return partidoDao.save(partido);
-    }
-
-    @Transactional
-    public Partido iniciarSiguientePeriodo(long id, long usuarioId) {
-        Partido partido = partidoDao.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
-        validarGestorPartido(partido, usuarioId);
-        if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO || !partido.isControlTiempoActivo() ||
-                partido.getInicioPeriodoActual() != null) {
-            throw new IllegalArgumentException("No hay un periodo detenido pendiente de iniciar");
-        }
-        PeriodoPartido siguiente = switch (partido.getPeriodoActual()) {
-            case DESCANSO -> PeriodoPartido.SEGUNDO_TIEMPO;
-            case DESCANSO_EXTRA -> PeriodoPartido.PRIMER_TIEMPO_EXTRA;
-            default -> throw new IllegalArgumentException("El partido no está en un descanso válido");
-        };
-        partido.setPeriodoActual(siguiente);
-        partido.setInicioPeriodoActual(new Date());
-        return partidoDao.save(partido);
-    }
-
-    @Transactional
-    public Partido cerrarPeriodo(long id, int alargue, String continuacion, long usuarioId) {
-        Partido partido = partidoDao.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("El partido no existe"));
-        validarGestorPartido(partido, usuarioId);
-        if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO || !partido.isControlTiempoActivo() ||
-                partido.getPeriodoActual() == null || partido.getInicioPeriodoActual() == null || alargue < 0) {
-            throw new IllegalArgumentException("No se puede cerrar el periodo actual");
-        }
-
-        PeriodoPartido periodo = partido.getPeriodoActual();
-        int duracionTiempo = duracionTiempoMinutos(partido);
-        int duracionTiempoExtra = duracionTiempoExtraMinutos(partido);
-        if (periodo == PeriodoPartido.PRIMER_TIEMPO) {
-            partido.setAlarguePrimerTiempo(alargue);
-            partido.setMinutoBasePeriodo(duracionTiempo);
-            partido.setPeriodoActual(PeriodoPartido.DESCANSO);
-            partido.setInicioPeriodoActual(null);
-            return partidoDao.save(partido);
-        }
-        if (periodo == PeriodoPartido.PRIMER_TIEMPO_EXTRA) {
-            partido.setAlarguePrimerTiempoExtra(alargue);
-            partido.setMinutoBasePeriodo(2 * duracionTiempo + duracionTiempoExtra);
-            partido.setPeriodoActual(PeriodoPartido.DESCANSO_EXTRA);
-            partido.setInicioPeriodoActual(null);
-            return partidoDao.save(partido);
-        }
-
-        int baseSiguiente = periodo == PeriodoPartido.SEGUNDO_TIEMPO
-                ? duracionTiempo
-                : 2 * duracionTiempo + duracionTiempoExtra;
-        int duracionPeriodo = periodo == PeriodoPartido.SEGUNDO_TIEMPO
-                ? duracionTiempo
-                : duracionTiempoExtra;
-        if (periodo == PeriodoPartido.SEGUNDO_TIEMPO) partido.setAlargueSegundoTiempo(alargue);
-        else if (periodo == PeriodoPartido.SEGUNDO_TIEMPO_EXTRA) partido.setAlargueSegundoTiempoExtra(alargue);
-        else throw new IllegalArgumentException("Periodo no reconocido");
-        partido.setMinutoBasePeriodo(baseSiguiente + duracionPeriodo);
-        partido.setInicioPeriodoActual(null);
-
-        boolean empatado = partido.getAnotacionesEquipoLocal() == partido.getAnotacionesEquipoVisitante();
-        if (empatado) {
-            if ("PRORROGA".equals(continuacion) && periodo == PeriodoPartido.SEGUNDO_TIEMPO) {
-                partido.setPeriodoActual(PeriodoPartido.DESCANSO_EXTRA);
-                return partidoDao.save(partido);
-            }
-            if ("PENALTIS".equals(continuacion)) {
-                partido.setPeriodoActual(PeriodoPartido.PENALES);
-                return partidoDao.save(partido);
-            }
-            if ("EMPATE".equals(continuacion)) {
-                partido.setPeriodoActual(PeriodoPartido.FINALIZADO);
-                return terminarPartido(id, usuarioId);
-            }
-            throw new IllegalArgumentException("Selecciona prórroga, penaltis o terminar en empate");
-        }
-        partido.setPeriodoActual(PeriodoPartido.FINALIZADO);
-        return terminarPartido(id, usuarioId);
-    }
-
-    private int duracionTiempoMinutos(Partido partido) {
-        int duracion = partido.getTorneo() == null ? 0 : partido.getTorneo().getDuracionTiempoMinutos();
-        return duracion > 0 ? duracion : 45;
-    }
-
-    private int duracionTiempoExtraMinutos(Partido partido) {
-        int duracion = partido.getTorneo() == null ? 0 : partido.getTorneo().getDuracionTiempoExtraMinutos();
-        return duracion > 0 ? duracion : 15;
-    }
-
-    public int minutoActualPartido(Partido partido) {
-        if (partido == null || !partido.isControlTiempoActivo() ||
-                partido.getInicioPeriodoActual() == null || partido.getPeriodoActual() == null) return 0;
-        int transcurridos = (int) java.time.Duration.between(
-                partido.getInicioPeriodoActual().toInstant(), Instant.now()).toMinutes();
-        boolean periodoActivo = switch (partido.getPeriodoActual()) {
-            case PRIMER_TIEMPO, SEGUNDO_TIEMPO, PRIMER_TIEMPO_EXTRA, SEGUNDO_TIEMPO_EXTRA -> true;
-            default -> false;
-        };
-        return partido.getMinutoBasePeriodo() + (periodoActivo ? Math.max(transcurridos, 0) : 0);
     }
     public Partido terminarPartido(long id, long usuarioId) {
         Partido partido = partidoDao.findById(id)
@@ -867,8 +755,6 @@ public class PartidoService {
             throw new IllegalArgumentException("Solo se puede terminar un partido en proceso");
         }
         partido.setEstadoPartido(EstadoPartido.TERMINADO);
-        partido.setPeriodoActual(partido.isControlTiempoActivo() ? PeriodoPartido.FINALIZADO : partido.getPeriodoActual());
-        partido.setInicioPeriodoActual(null);
         marcarParticipantes(partido);
         sancionService.cumplirSanciones(partido);
         Partido guardado = partidoDao.save(partido);
@@ -891,8 +777,6 @@ public class PartidoService {
             throw new IllegalArgumentException("Solo se pueden jugar penaltis si el partido termina empatado");
         }
         partido.setEstadoPartido(EstadoPartido.TERMINADO);
-        partido.setPeriodoActual(PeriodoPartido.FINALIZADO);
-        partido.setInicioPeriodoActual(null);
         marcarParticipantes(partido);
         sancionService.cumplirSanciones(partido);
         if (gandor.equals("L") ) {
