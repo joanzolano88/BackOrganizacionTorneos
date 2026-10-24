@@ -8,6 +8,7 @@ import com.example.torneos.DTO.DtoSancionJugadorPartido;
 import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
 import com.example.torneos.DTO.DtoSolicitudSustitucion;
 import com.example.torneos.DTO.DtoEventoPartido;
+import com.example.torneos.DTO.DtoRegistroJugadorConvocatoria;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
@@ -41,6 +42,7 @@ import com.example.torneos.enums.ModoCambioJugador;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -67,6 +69,7 @@ public class ConvocatoriaPartidoService {
     @Autowired private SolicitudSustitucionPartidoDao solicitudSustitucionDao;
     @Autowired private NotificacionUsuarioDao notificacionDao;
     @Autowired private PagoInscripcionDao pagoInscripcionDao;
+    @Autowired private PasswordEncoder passwordEncoder;
 
     private static final Map<String, List<Integer>> FORMACIONES = Map.of(
             "4-4-2", List.of(1, 4, 4, 2),
@@ -312,6 +315,56 @@ public class ConvocatoriaPartidoService {
                         jugador.getIdentificacion(),
                         jugador.getNumeroCamiseta()))
                 .toList();
+    }
+
+    @Transactional
+    public DtoJugadorDisponiblePartido registrarJugadorEquipo(
+            long partidoId, long equipoId, DtoRegistroJugadorConvocatoria solicitud, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        validarEstadoEditable(partido);
+        Equipo equipo = equipoDelPartido(partido, equipoId);
+        validarEquipoDelDelegado(partido, equipo, usuario);
+
+        String nombre = solicitud == null || solicitud.nombre() == null ? "" : solicitud.nombre().trim();
+        String identificacion = solicitud == null || solicitud.identificacion() == null
+                ? "" : solicitud.identificacion().trim();
+        if (nombre.isBlank() || identificacion.isBlank()) {
+            throw new IllegalArgumentException("El nombre y la cédula del jugador son obligatorios");
+        }
+        if (jugadorDao.findByIdentificacion(identificacion).isPresent()
+                || usuarioDao.findByIdentificacion(identificacion) != null) {
+            throw new IllegalArgumentException("Ya existe un perfil con esa cédula. Busca al jugador para agregarlo al partido.");
+        }
+
+        Usuario cuenta = new Usuario();
+        cuenta.setNombre(nombre);
+        cuenta.setIdentificacion(identificacion);
+        cuenta.setContrasena(passwordEncoder.encode(identificacion));
+        cuenta.setTipoUsuario(TipoUsuario.JUGADOR);
+        usuarioDao.save(cuenta);
+
+        Jugador jugador = new Jugador();
+        jugador.setNombre(nombre);
+        jugador.setIdentificacion(identificacion);
+        jugador.setEstadoJugador(EstadoJugador.ACTIVO);
+        jugador.setEquipo(equipo);
+        if (jugador.getEquipos() == null) jugador.setEquipos(new java.util.HashSet<>());
+        jugador.getEquipos().add(equipo);
+        jugador = jugadorDao.save(jugador);
+
+        com.example.torneos.entities.ParticipacionJugadorTorneo participacion =
+                new com.example.torneos.entities.ParticipacionJugadorTorneo();
+        participacion.setTorneo(partido.getTorneo());
+        participacion.setEquipo(equipo);
+        participacion.setJugador(jugador);
+        participacion.setParticipando(false);
+        participacion.setJugoPartido(false);
+        participacionDao.save(participacion);
+
+        return new DtoJugadorDisponiblePartido(
+                jugador.getId(), jugador.getNombre(), jugador.getIdentificacion(), jugador.getNumeroCamiseta());
     }
 
     @Transactional(readOnly = true)

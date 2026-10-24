@@ -3,6 +3,7 @@ package com.example.torneos.services;
 import com.example.torneos.DTO.DtoRegistrarGol;
 import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
 import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
+import com.example.torneos.DTO.DtoRegistroJugadorConvocatoria;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
@@ -38,6 +39,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.Optional;
@@ -68,6 +70,7 @@ class ConvocatoriaPartidoServiceTest {
     @Mock private SolicitudSustitucionPartidoDao solicitudSustitucionDao;
     @Mock private NotificacionUsuarioDao notificacionDao;
     @Mock private PagoInscripcionDao pagoInscripcionDao;
+    @Mock private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private ConvocatoriaPartidoService service;
@@ -514,6 +517,37 @@ class ConvocatoriaPartidoServiceTest {
                 () -> service.agregar(5L, jugadorLocal.getId(), true, 10, 99L));
 
         verify(convocatoriaDao, never()).save(any(ConvocatoriaPartido.class));
+    }
+
+    @Test
+    void registrarJugadorEquipo_creaCuentaJugadorYParticipacionDelEquipo() {
+        usuarioOrganizador();
+        when(usuarioDao.findByIdentificacion("12345678")).thenReturn(null);
+        when(passwordEncoder.encode("12345678")).thenReturn("encoded-password");
+        when(usuarioDao.save(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jugadorDao.findByIdentificacion("12345678")).thenReturn(Optional.empty());
+        when(jugadorDao.save(any(Jugador.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(participacionDao.save(any(ParticipacionJugadorTorneo.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var registrada = service.registrarJugadorEquipo(
+                5L, 10L, new DtoRegistroJugadorConvocatoria("Jugador Nuevo", "12345678"), 99L);
+
+        assertEquals("Jugador Nuevo", registrada.nombre());
+        assertEquals("12345678", registrada.identificacion());
+        ArgumentCaptor<Usuario> cuenta = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioDao).save(cuenta.capture());
+        assertEquals("encoded-password", cuenta.getValue().getContrasena());
+        assertEquals(TipoUsuario.JUGADOR, cuenta.getValue().getTipoUsuario());
+        ArgumentCaptor<Jugador> jugador = ArgumentCaptor.forClass(Jugador.class);
+        verify(jugadorDao).save(jugador.capture());
+        assertEquals(local, jugador.getValue().getEquipo());
+        assertTrue(jugador.getValue().getEquipos().contains(local));
+        ArgumentCaptor<ParticipacionJugadorTorneo> participacion =
+                ArgumentCaptor.forClass(ParticipacionJugadorTorneo.class);
+        verify(participacionDao).save(participacion.capture());
+        assertEquals(partido.getTorneo(), participacion.getValue().getTorneo());
+        assertEquals(local, participacion.getValue().getEquipo());
     }
 
     @Test

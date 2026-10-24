@@ -8,6 +8,7 @@ import com.example.torneos.DTO.DtoJugadorDisponiblePartido;
 import com.example.torneos.DTO.DtoSancionJugadorPartido;
 import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
 import com.example.torneos.DTO.DtoSolicitudSustitucion;
+import com.example.torneos.DTO.DtoRegistroJugadorConvocatoria;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -71,6 +72,14 @@ public class ConvocatoriaPartidoRest {
     @GetMapping("/{partidoId}/jugadores-disponibles/{equipoId}")
     public List<DtoJugadorDisponiblePartido> disponibles(@PathVariable long partidoId, @PathVariable long equipoId) {
         return service.jugadoresDelEquipo(partidoId, equipoId);
+    }
+
+    @PostMapping("/{partidoId}/equipos/{equipoId}/jugadores")
+    public DtoJugadorDisponiblePartido registrarJugadorEquipo(@PathVariable long partidoId,
+                                                               @PathVariable long equipoId,
+                                                               @RequestBody DtoRegistroJugadorConvocatoria solicitud,
+                                                               @AuthenticationPrincipal Long usuarioId) {
+        return service.registrarJugadorEquipo(partidoId, equipoId, solicitud, usuarioId);
     }
 
     @GetMapping("/{partidoId}/jugador/identificacion/{identificacion}")

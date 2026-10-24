@@ -67,11 +67,13 @@ public class UsuarioService {
 
     private boolean coincideContrasena(String guardada, String ingresada) {
         if (ingresada == null || guardada == null) return false;
+        if (esHashBcrypt(guardada)) return passwordEncoder.matches(ingresada, guardada);
         return guardada.equals(ingresada);
     }
 
     private boolean esHashBcrypt(String contrasena) {
-        return false;
+        return contrasena.startsWith("$2a$") || contrasena.startsWith("$2b$") ||
+                contrasena.startsWith("$2y$");
     }
     public Usuario getById(long id) {
         Usuario usuario = usuarioDao.findById(id).orElse(null);

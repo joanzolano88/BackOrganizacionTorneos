@@ -58,4 +58,25 @@ class UsuarioServiceTest {
         assertEquals(TipoUsuario.JUGADOR, info.getTipoUsuario());
         assertEquals("token-test", info.getToken());
     }
+
+    @Test
+    void iniciarSesion_aceptaContrasenaBcrypt() {
+        DtoLoginInfo dtoLoginInfo = new DtoLoginInfo();
+        dtoLoginInfo.setIdentificacion("123456");
+        dtoLoginInfo.setContrasena("123456");
+
+        Usuario usuario = new Usuario();
+        usuario.setId(1L);
+        usuario.setIdentificacion("123456");
+        usuario.setContrasena("$2a$10$hash");
+        usuario.setTipoUsuario(TipoUsuario.JUGADOR);
+
+        when(usuarioDao.findByIdentificacion("123456")).thenReturn(usuario);
+        when(passwordEncoder.matches("123456", "$2a$10$hash")).thenReturn(true);
+        when(jwtTokenService.emitir(1L, "123456", TipoUsuario.JUGADOR.name())).thenReturn("token-test");
+
+        DtoUsuarioInfo info = usuarioService.iniciarSesion(dtoLoginInfo);
+
+        assertEquals("token-test", info.getToken());
+    }
 }
