@@ -465,10 +465,11 @@ class ConvocatoriaPartidoServiceTest {
         when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ConvocatoriaPartido convocatoria = service.agregar(5L, 100L, false, null, 99L);
+        ConvocatoriaPartido convocatoria = service.agregar(5L, 100L, false, 8, 99L);
 
         assertEquals(jugadorLocal, convocatoria.getJugador());
         assertTrue(!convocatoria.isTitular());
+        assertEquals(8, convocatoria.getNumeroUniforme());
         verify(convocatoriaDao).save(any(ConvocatoriaPartido.class));
     }
 

@@ -369,7 +369,7 @@ public class ConvocatoriaPartidoService {
         ConvocatoriaPartido convocatoria = new ConvocatoriaPartido();
         convocatoria.setPartido(partido);
         convocatoria.setJugador(jugador);
-        if (titular) {
+        if (titular || numeroUniforme != null) {
             validarNumeroUniforme(partido, equipo, convocatoria, numeroUniforme == null ? -1 : numeroUniforme);
             convocatoria.setNumeroUniforme(numeroUniforme);
         }
