@@ -10,6 +10,7 @@ import java.util.Optional;
 
 public interface AyudanteTorneoDao extends JpaRepository<AyudanteTorneo, Long> {
     List<AyudanteTorneo> findByTorneo(Torneo torneo);
+    List<AyudanteTorneo> findByUsuario(Usuario usuario);
     Optional<AyudanteTorneo> findByTorneoAndUsuario(Torneo torneo, Usuario usuario);
     void deleteByTorneoAndUsuario(Torneo torneo, Usuario usuario);
 }

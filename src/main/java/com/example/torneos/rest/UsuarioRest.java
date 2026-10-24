@@ -10,6 +10,7 @@ import com.example.torneos.dao.EquipoDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Persona;
 import com.example.torneos.entities.NotificacionUsuario;
@@ -43,6 +44,7 @@ public class UsuarioRest {
     @Autowired private TorneoDao torneoDao;
     @Autowired private JugadorDao jugadorDao;
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
+    @Autowired private AyudanteTorneoDao ayudanteTorneoDao;
     @Autowired private NotificacionUsuarioDao notificacionDao;
 
     @PostMapping
@@ -82,6 +84,9 @@ public class UsuarioRest {
         Map<String, Object> respuesta = new HashMap<>();
         respuesta.put("usuario", usuario);
         respuesta.put("torneosCreados", torneoDao.findByEncargadoTorneo(usuario));
+        respuesta.put("torneosAyudante", ayudanteTorneoDao.findByUsuario(usuario).stream()
+                .map(relacion -> relacion.getTorneo())
+                .toList());
         Persona delegado = usuario.getNumeroCelular() == null ? null : usuarioService.buscarPersonaPorCelular(usuario.getNumeroCelular());
         List<Equipo> equiposDelegado = delegado == null ? List.of() : equipoDao.findByDelegado(delegado);
         respuesta.put("equiposDelegado", equiposDelegado);
