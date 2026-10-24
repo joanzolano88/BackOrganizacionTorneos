@@ -517,6 +517,26 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void eliminarEventoGol_restaElMarcadorDelEquipoAnotador() {
+        usuarioOrganizador();
+        partido.setAnotacionesEquipoLocal(1);
+        EventoPartido gol = new EventoPartido();
+        gol.setId(77L);
+        gol.setPartido(partido);
+        gol.setJugador(jugadorLocal);
+        gol.setEquipoAnotador(local);
+        gol.setTipo(TipoEventoPartido.GOL);
+        when(eventoDao.findById(77L)).thenReturn(Optional.of(gol));
+        when(partidoDao.save(partido)).thenReturn(partido);
+
+        Partido resultado = service.eliminarEvento(77L, 99L);
+
+        assertEquals(0, resultado.getAnotacionesEquipoLocal());
+        verify(eventoDao).delete(gol);
+        verify(partidoDao).save(partido);
+    }
+
+    @Test
     void sustituirJugadorInscrito_agregaAlPartidoJugadorInscritoQueAunNoTeniaConvocatoria() {
         usuarioOrganizador();
         ConvocatoriaPartido titular = convocatoria(1L, jugadorLocal);

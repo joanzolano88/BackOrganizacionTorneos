@@ -115,6 +115,12 @@ public class ConvocatoriaPartidoRest {
         return service.registrarEvento(partidoId, jugadorId, tipo, minuto, dobleAmarilla, usuarioId);
     }
 
+    @DeleteMapping("/eventos/{eventoId}")
+    public com.example.torneos.entities.Partido eliminarEvento(@PathVariable long eventoId,
+                                                               @AuthenticationPrincipal Long usuarioId) {
+        return service.eliminarEvento(eventoId, usuarioId);
+    }
+
     @PostMapping("/{partidoId}/goles")
     public com.example.torneos.entities.Partido registrarGol(@PathVariable long partidoId,
                                                              @RequestBody DtoRegistrarGol solicitud,

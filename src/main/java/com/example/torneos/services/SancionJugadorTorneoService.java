@@ -70,6 +70,23 @@ public class SancionJugadorTorneoService {
         }
     }
 
+    @Transactional
+    public void eliminarSancionPorTarjeta(EventoPartido evento) {
+        if (evento.getJugador() == null) return;
+        SancionJugadorTorneo sancion = sancionDao
+                .findByTorneoAndJugadorAndActivaTrue(evento.getPartido().getTorneo(), evento.getJugador())
+                .orElse(null);
+        if (sancion == null || !Long.valueOf(evento.getPartido().getId()).equals(sancion.getPartidoOrigenId())) return;
+        boolean sancionDeEvento = evento.getTipo() == TipoEventoPartido.TARJETA_ROJA
+                ? "TARJETA_ROJA".equals(sancion.getMotivo())
+                : "ACUMULACION_AMARILLAS".equals(sancion.getMotivo());
+        if (!sancionDeEvento) return;
+        sancion.setActiva(false);
+        sancion.setPartidosPendientes(0);
+        sancion.setPermanente(false);
+        sancionDao.save(sancion);
+    }
+
     private void aplicar(EventoPartido evento, String motivo, int partidos, boolean permanente) {
         Partido partido = evento.getPartido();
         Jugador jugador = evento.getJugador();

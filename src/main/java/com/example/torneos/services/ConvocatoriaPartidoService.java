@@ -852,6 +852,73 @@ public class ConvocatoriaPartidoService {
     }
 
     @Transactional
+    public Partido eliminarEvento(long eventoId, long usuarioId) {
+        EventoPartido evento = eventoDao.findById(eventoId)
+                .orElseThrow(() -> new IllegalArgumentException("El evento no existe"));
+        Partido partido = evento.getPartido();
+        validarGestorRegistroEventos(partido, usuario(usuarioId));
+        if (partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Solo se pueden eliminar eventos mientras el partido está en proceso");
+        }
+
+        if (evento.getTipo() == TipoEventoPartido.GOL || evento.getTipo() == TipoEventoPartido.AUTOGOL) {
+            Equipo equipoAnotador = evento.getEquipoAnotador();
+            if (equipoAnotador == null && evento.getJugador() != null) {
+                equipoAnotador = evento.getJugador().getEquipo();
+            }
+            if (equipoAnotador != null && partido.getEquipoLocal() != null
+                    && Objects.equals(equipoAnotador.getId(), partido.getEquipoLocal().getId())) {
+                partido.setAnotacionesEquipoLocal(Math.max(0, partido.getAnotacionesEquipoLocal() - 1));
+            } else if (equipoAnotador != null && partido.getEquipoVisitante() != null
+                    && Objects.equals(equipoAnotador.getId(), partido.getEquipoVisitante().getId())) {
+                partido.setAnotacionesEquipoVisitante(Math.max(0, partido.getAnotacionesEquipoVisitante() - 1));
+            }
+            eliminarEventoAsistenciaDelGol(evento);
+        } else if (evento.getTipo() == TipoEventoPartido.ASISTENCIA && evento.getJugador() != null) {
+            eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido).stream()
+                    .filter(item -> item.getTipo() == TipoEventoPartido.GOL
+                            && item.getMinuto() == evento.getMinuto()
+                            && item.getAsistidor() != null
+                            && Objects.equals(item.getAsistidor().getId(), evento.getJugador().getId()))
+                    .findFirst()
+                    .ifPresent(gol -> {
+                        gol.setAsistidor(null);
+                        eventoDao.save(gol);
+                    });
+        } else if (evento.getTipo() == TipoEventoPartido.TARJETA_AMARILLA
+                || evento.getTipo() == TipoEventoPartido.TARJETA_ROJA) {
+            sancionService.eliminarSancionPorTarjeta(evento);
+            if (evento.getTipo() == TipoEventoPartido.TARJETA_ROJA && evento.getJugador() != null) {
+                boolean tieneOtraRoja = eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido).stream()
+                        .anyMatch(item -> !Objects.equals(item.getId(), eventoId)
+                                && item.getTipo() == TipoEventoPartido.TARJETA_ROJA
+                                && item.getJugador() != null
+                                && Objects.equals(item.getJugador().getId(), evento.getJugador().getId()));
+                if (!tieneOtraRoja) {
+                    convocatoriaDao.findByPartidoAndJugador(partido, evento.getJugador()).ifPresent(convocatoria -> {
+                        convocatoria.setExpulsado(false);
+                        convocatoriaDao.save(convocatoria);
+                    });
+                }
+            }
+        }
+
+        eventoDao.delete(evento);
+        return partidoDao.save(partido);
+    }
+
+    private void eliminarEventoAsistenciaDelGol(EventoPartido gol) {
+        if (gol.getAsistidor() == null) return;
+        eventoDao.findByPartidoOrderByMinutoAscIdAsc(gol.getPartido()).stream()
+                .filter(evento -> evento.getTipo() == TipoEventoPartido.ASISTENCIA
+                        && evento.getMinuto() == gol.getMinuto()
+                        && evento.getJugador() != null
+                        && Objects.equals(evento.getJugador().getId(), gol.getAsistidor().getId()))
+                .findFirst()
+                .ifPresent(eventoDao::delete);
+    }
+
+    @Transactional
     public com.example.torneos.entities.EventoPartido registrarEvento(long partidoId, long jugadorId, TipoEventoPartido tipo, int minuto, long usuarioId) {
         return registrarEvento(partidoId, jugadorId, tipo, minuto, false, usuarioId);
     }
