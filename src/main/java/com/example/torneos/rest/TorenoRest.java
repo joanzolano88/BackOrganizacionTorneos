@@ -5,12 +5,14 @@ import com.example.torneos.DTO.DtoGrupoLlave;
 import com.example.torneos.DTO.DtoOptionTorneo;
 import com.example.torneos.DTO.DtoDistribucionEquipo;
 import com.example.torneos.DTO.DtoAyudanteTorneo;
+import com.example.torneos.DTO.DtoEstadisticasTorneo;
 import com.example.torneos.entities.GrupoLlave;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Reglamento;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.enums.FaseActual;
 import com.example.torneos.services.TorenoService;
+import com.example.torneos.services.EstadisticasTorneoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,6 +32,8 @@ import java.util.List;
 public class TorenoRest {
     @Autowired
     private TorenoService torenoService;
+    @Autowired
+    private EstadisticasTorneoService estadisticasTorneoService;
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -87,6 +91,11 @@ public class TorenoRest {
     @GetMapping("/{id}")
     public Torneo getById(@PathVariable long id){
         return torenoService.getById(id);
+    }
+
+    @GetMapping("/{idTorneo}/estadisticas")
+    public DtoEstadisticasTorneo estadisticas(@PathVariable long idTorneo) {
+        return estadisticasTorneoService.obtener(idTorneo);
     }
 
     @PutMapping("/cambiar_fase_torneo/{idTorneo}")
