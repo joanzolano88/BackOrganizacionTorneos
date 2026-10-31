@@ -418,6 +418,61 @@ class EquipoServiceTest {
     }
 
     @Test
+    void agregarDelegadoComoJugador_agregaSuPerfilAlPlantel() {
+        Equipo equipo = new Equipo();
+        equipo.setId(25L);
+        equipo.setDelegado(delegado);
+        Usuario usuario = new Usuario();
+        usuario.setId(5L);
+        usuario.setTipoUsuario(TipoUsuario.DELEGADO);
+        usuario.setIdentificacion("123456");
+        usuario.setNumeroCelular(delegado.getNumeroCelular());
+        when(equipoDao.findById(25L)).thenReturn(Optional.of(equipo));
+        when(usuarioDao.findById(5L)).thenReturn(Optional.of(usuario));
+        when(jugadorDao.findByPersonaIdentificacion("123456")).thenReturn(Optional.empty());
+        when(jugadorDao.save(any(Jugador.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Jugador jugador = equipoService.agregarDelegadoComoJugador(25L, 5L);
+
+        assertEquals(usuario.getPersona(), jugador.getPersona());
+        assertTrue(jugador.getEquipos().contains(equipo));
+        assertEquals(equipo, jugador.getEquipo());
+    }
+
+    @Test
+    void registrarJugadorEnEquipo_permiteAlDelegadoInscribirseEnElTorneo() {
+        Equipo equipo = new Equipo();
+        equipo.setId(25L);
+        equipo.setDelegado(delegado);
+        Usuario usuario = new Usuario();
+        usuario.setId(5L);
+        usuario.setTipoUsuario(TipoUsuario.DELEGADO);
+        usuario.setIdentificacion("123456");
+        usuario.setNumeroCelular(delegado.getNumeroCelular());
+        ParticipacionEquipoTorneo participacionEquipo = new ParticipacionEquipoTorneo();
+        participacionEquipo.setEquipo(equipo);
+        participacionEquipo.setTorneo(torneo);
+        participacionEquipo.setEstado("ACEPTADO");
+        when(equipoDao.findById(25L)).thenReturn(Optional.of(equipo));
+        when(usuarioDao.findById(5L)).thenReturn(Optional.of(usuario));
+        when(torneoDao.findById(10L)).thenReturn(Optional.of(torneo));
+        when(participacionEquipoDao.findByEquipoAndTorneo(equipo, torneo))
+                .thenReturn(Optional.of(participacionEquipo));
+        when(jugadorDao.findByPersonaIdentificacion("123456")).thenReturn(Optional.empty());
+        when(jugadorDao.save(any(Jugador.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(participacionDao.findByTorneoAndJugador(any(Torneo.class), any(Jugador.class)))
+                .thenReturn(Optional.empty());
+        when(participacionDao.save(any(ParticipacionJugadorTorneo.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Jugador jugador = equipoService.registrarJugadorEnEquipo(10L, 25L, 5L);
+
+        assertTrue(jugador.getEquipos().contains(equipo));
+        assertEquals(equipo, jugador.getEquipo());
+        verify(participacionDao).save(any(ParticipacionJugadorTorneo.class));
+    }
+
+    @Test
     void saveSolicitud_debeRechazarCuandoUbicacionDelUsuarioNoCoincide() {
         Equipo solicitud = new Equipo();
         solicitud.setNombre("Equipo Morado");

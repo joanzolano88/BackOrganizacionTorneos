@@ -96,6 +96,11 @@ public class EquipoRest {
     public Jugador registrarJugador(@PathVariable long idTorneo, @PathVariable long idEquipo, @AuthenticationPrincipal Long usuarioId) {
         return equipoService.registrarJugadorEnEquipo(idTorneo, idEquipo, usuarioId);
     }
+    @PostMapping("/{idEquipo}/delegado/jugador")
+    public Jugador agregarDelegadoComoJugador(@PathVariable long idEquipo,
+                                               @AuthenticationPrincipal Long usuarioId) {
+        return equipoService.agregarDelegadoComoJugador(idEquipo, usuarioId);
+    }
     @PostMapping("/{idEquipo}/torneo/{idTorneo}/jugadores/{idJugador}")
     public ParticipacionJugadorTorneo agregarJugadorATorneo(@PathVariable long idEquipo, @PathVariable long idTorneo,
                                                               @PathVariable long idJugador, @AuthenticationPrincipal Long usuarioId) {

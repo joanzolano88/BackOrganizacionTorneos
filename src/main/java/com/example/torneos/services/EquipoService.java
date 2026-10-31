@@ -663,6 +663,7 @@ public class EquipoService {
         return listaEquipos;
     }
 
+    @Transactional
     public Jugador registrarJugadorEnEquipo(long idTorneo, long idEquipo, long idUsuario) {
         Torneo torneo = torneoDao.findById(idTorneo)
                 .orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
@@ -680,7 +681,8 @@ public class EquipoService {
         }
         Jugador jugador = jugadorPorUsuario(usuario);
         ParticipacionJugadorTorneo participacion = participacionDao.findByTorneoAndJugador(torneo, jugador).orElse(null);
-        if (participacion != null && participacion.getEquipo().getId() != equipo.getId()) {
+        if (participacion != null && participacion.getEquipo() != null
+                && participacion.getEquipo().getId() != equipo.getId()) {
             throw new IllegalArgumentException("El jugador ya participa en este torneo con otro equipo");
         }
         jugador.getEquipos().add(equipo);
@@ -693,6 +695,27 @@ public class EquipoService {
         participacion.setEquipo(equipo);
         participacion.setParticipando(false);
         participacionDao.save(participacion);
+        return jugadorDao.save(jugador);
+    }
+
+    @Transactional
+    public Jugador agregarDelegadoComoJugador(long idEquipo, long idUsuario) {
+        Equipo equipo = equipo(idEquipo);
+        validarDelegado(equipo, idUsuario);
+        Usuario usuario = usuarioDao.findById(idUsuario)
+                .orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) {
+            throw new IllegalArgumentException("Tu perfil debe tener una identificación registrada");
+        }
+
+        Jugador jugador = jugadorPorUsuario(usuario);
+        if (jugador.getEquipos() == null) {
+            jugador.setEquipos(new java.util.HashSet<>());
+        }
+        jugador.getEquipos().add(equipo);
+        if (jugador.getEquipo() == null) {
+            jugador.setEquipo(equipo);
+        }
         return jugadorDao.save(jugador);
     }
 
