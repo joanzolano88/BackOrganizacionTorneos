@@ -30,10 +30,18 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         if (!columnExists("usuario", "persona_id") || !columnExists("jugador", "persona_id")) return;
+        sincronizarSecuenciaPersona();
         eliminarUnicidadPersona("usuario");
         eliminarUnicidadPersona("jugador");
         migrarTabla("usuario", true, true);
         migrarTabla("jugador", false, false);
+    }
+
+    private void sincronizarSecuenciaPersona() {
+        jdbcTemplate.execute("CREATE SEQUENCE IF NOT EXISTS persona_id_seq START WITH 1 INCREMENT BY 1");
+        jdbcTemplate.queryForObject(
+                "SELECT setval('persona_id_seq', COALESCE((SELECT MAX(id) FROM persona), 0) + 1, false)",
+                Long.class);
     }
 
     private void migrarTabla(String tabla, boolean usuario, boolean priorizarDatos) {

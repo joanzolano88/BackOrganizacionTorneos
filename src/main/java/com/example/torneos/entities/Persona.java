@@ -8,6 +8,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
+import jakarta.persistence.SequenceGenerator;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -17,7 +18,8 @@ import java.time.LocalDate;
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true)
 public class Persona {
     @Id
-    @GeneratedValue
+    @SequenceGenerator(name = "persona_id_generator", sequenceName = "persona_id_seq", allocationSize = 1)
+    @GeneratedValue(generator = "persona_id_generator")
     private long id;
     private String nombre;
     @Basic(fetch = FetchType.LAZY)
