@@ -45,7 +45,7 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
         for (Map<String, Object> perfil : perfiles) {
             Persona persona = obtenerPersona(perfil);
             completarPersona(perfil, persona, priorizarDatos);
-            persona = personaDao.save(persona);
+            persona = personaDao.saveAndFlush(persona);
             jdbcTemplate.update("UPDATE " + tabla + " SET persona_id = ? WHERE id = ?",
                     persona.getId(), perfil.get("id"));
         }
