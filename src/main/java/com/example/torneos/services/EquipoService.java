@@ -779,15 +779,18 @@ public class EquipoService {
             notificacion.setLeida(false);
             notificacionDao.save(notificacion);
         }
-        return invitacionEquipoDao.buscarDto(guardada.getId())
-                .orElseThrow(() -> new IllegalStateException("No se pudo recuperar la invitación creada"));
+        return convertirInvitacionDto(guardada);
     }
 
     @Transactional(readOnly = true)
     public List<DtoInvitacionEquipo> invitacionesJugador(long idUsuario) {
         Usuario usuario = usuarioDao.findById(idUsuario).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
         if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) throw new IllegalArgumentException("El perfil debe tener una identificación registrada");
-        return invitacionEquipoDao.listarDtoPorIdentificacionYEstado(usuario.getIdentificacion(), "PENDIENTE");
+        return invitacionEquipoDao.findByJugador_Persona_IdentificacionAndEstadoOrderByCreadaEnDesc(
+                        usuario.getIdentificacion(), "PENDIENTE")
+                .stream()
+                .map(this::convertirInvitacionDto)
+                .toList();
     }
 
     @Transactional
@@ -809,8 +812,21 @@ public class EquipoService {
         }
         invitacionEquipoDao.save(invitacion);
         eliminarNotificacionesAccion("INVITACION_EQUIPO", invitacion.getId());
-        return invitacionEquipoDao.buscarDto(idInvitacion)
-            .orElseThrow(() -> new IllegalStateException("No se pudo recuperar la invitación actualizada"));
+        return convertirInvitacionDto(invitacion);
+    }
+
+    private DtoInvitacionEquipo convertirInvitacionDto(InvitacionEquipo invitacion) {
+        Equipo equipo = invitacion.getEquipo();
+        Jugador jugador = invitacion.getJugador();
+        return new DtoInvitacionEquipo(
+                invitacion.getId(),
+                equipo.getId(),
+                equipo.getNombre(),
+                jugador.getId(),
+                jugador.getNombre(),
+                jugador.getIdentificacion(),
+                invitacion.getEstado(),
+                invitacion.getCreadaEn());
     }
 
     private void notificarAccionDelegado(Equipo equipo, String titulo, String mensaje, String referenciaTipo, Long referenciaId) {
