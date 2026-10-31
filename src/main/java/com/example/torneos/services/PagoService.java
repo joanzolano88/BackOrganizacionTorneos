@@ -83,9 +83,9 @@ public class PagoService {
 
     private void notificarDestinatario(Pago pago) {
         Usuario destinatario = pago.getJugador() != null
-                ? usuarioDao.findByIdentificacion(pago.getJugador().getIdentificacion())
+                ? usuarioDao.findByPersonaIdentificacion(pago.getJugador().getIdentificacion())
                 : pago.getEquipo().getDelegado() == null ? null
-                : usuarioDao.findByNumeroCelular(pago.getEquipo().getDelegado().getNumeroCelular());
+                : usuarioDao.findByPersonaNumeroCelular(pago.getEquipo().getDelegado().getNumeroCelular());
         if (destinatario == null) return;
         NotificacionUsuario notificacion = new NotificacionUsuario();
         notificacion.setUsuario(destinatario);

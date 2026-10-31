@@ -71,6 +71,7 @@ class ConvocatoriaPartidoServiceTest {
     @Mock private NotificacionUsuarioDao notificacionDao;
     @Mock private PagoInscripcionDao pagoInscripcionDao;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private PersonaService personaService;
 
     @InjectMocks
     private ConvocatoriaPartidoService service;
@@ -399,7 +400,7 @@ class ConvocatoriaPartidoServiceTest {
         when(usuarioDao.findById(88L)).thenReturn(Optional.of(ayudante));
         when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), ayudante))
                 .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
-        lenient().when(jugadorDao.findByIdentificacion("AYUDANTE-88")).thenReturn(Optional.of(jugadorLocal));
+        lenient().when(jugadorDao.findByPersonaIdentificacion("AYUDANTE-88")).thenReturn(Optional.of(jugadorLocal));
         convocar(jugadorLocal);
         when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
         when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -522,10 +523,10 @@ class ConvocatoriaPartidoServiceTest {
     @Test
     void registrarJugadorEquipo_creaCuentaJugadorYParticipacionDelEquipo() {
         usuarioOrganizador();
-        when(usuarioDao.findByIdentificacion("12345678")).thenReturn(null);
+        when(usuarioDao.findByPersonaIdentificacion("12345678")).thenReturn(null);
         when(passwordEncoder.encode("12345678")).thenReturn("encoded-password");
         when(usuarioDao.save(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(jugadorDao.findByIdentificacion("12345678")).thenReturn(Optional.empty());
+        when(jugadorDao.findByPersonaIdentificacion("12345678")).thenReturn(Optional.empty());
         when(jugadorDao.save(any(Jugador.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participacionDao.save(any(ParticipacionJugadorTorneo.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

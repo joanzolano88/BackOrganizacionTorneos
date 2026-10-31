@@ -21,7 +21,7 @@ import com.fasterxml.jackson.annotation.ObjectIdGenerators;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-public class Jugador extends InformacionPersona {
+public class Jugador extends PerfilPersona {
     @EqualsAndHashCode.Include
     private long identityId() {
         return getId();

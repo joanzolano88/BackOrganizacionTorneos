@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface ParticipacionEquipoTorneoDao extends JpaRepository<ParticipacionEquipoTorneo, Long> {
     Optional<ParticipacionEquipoTorneo> findByEquipoAndTorneo(Equipo equipo, Torneo torneo);
     List<ParticipacionEquipoTorneo> findByEquipo(Equipo equipo);
+    List<ParticipacionEquipoTorneo> findByEquipoIn(List<Equipo> equipos);
     List<ParticipacionEquipoTorneo> findByTorneo(Torneo torneo);
     List<ParticipacionEquipoTorneo> findByTorneoAndEstado(Torneo torneo, String estado);
     List<ParticipacionEquipoTorneo> findByTorneoAndEstadoAndFaseActual(Torneo torneo, String estado, FaseActual fase);

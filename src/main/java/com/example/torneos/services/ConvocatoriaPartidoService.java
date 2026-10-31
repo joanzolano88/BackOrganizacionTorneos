@@ -70,6 +70,7 @@ public class ConvocatoriaPartidoService {
     @Autowired private NotificacionUsuarioDao notificacionDao;
     @Autowired private PagoInscripcionDao pagoInscripcionDao;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private PersonaService personaService;
 
     private static final Map<String, List<Integer>> FORMACIONES = Map.of(
             "4-4-2", List.of(1, 4, 4, 2),
@@ -333,8 +334,8 @@ public class ConvocatoriaPartidoService {
         if (nombre.isBlank() || identificacion.isBlank()) {
             throw new IllegalArgumentException("El nombre y la cédula del jugador son obligatorios");
         }
-        if (jugadorDao.findByIdentificacion(identificacion).isPresent()
-                || usuarioDao.findByIdentificacion(identificacion) != null) {
+        if (jugadorDao.findByPersonaIdentificacion(identificacion).isPresent()
+                || usuarioDao.findByPersonaIdentificacion(identificacion) != null) {
             throw new IllegalArgumentException("Ya existe un perfil con esa cédula. Busca al jugador para agregarlo al partido.");
         }
 
@@ -343,11 +344,11 @@ public class ConvocatoriaPartidoService {
         cuenta.setIdentificacion(identificacion);
         cuenta.setContrasena(passwordEncoder.encode(identificacion));
         cuenta.setTipoUsuario(TipoUsuario.JUGADOR);
+        personaService.vincular(cuenta);
         usuarioDao.save(cuenta);
 
         Jugador jugador = new Jugador();
-        jugador.setNombre(nombre);
-        jugador.setIdentificacion(identificacion);
+        jugador.setPersona(cuenta.getPersona());
         jugador.setEstadoJugador(EstadoJugador.ACTIVO);
         jugador.setEquipo(equipo);
         if (jugador.getEquipos() == null) jugador.setEquipos(new java.util.HashSet<>());
@@ -388,7 +389,7 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        Jugador jugador = jugadorDao.findByIdentificacion(identificacion.trim())
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(identificacion.trim())
             .orElseThrow(() -> new IllegalArgumentException("No se encontró un jugador con esa identificación"));
         validarEquipoDelDelegado(partido, equipoDeJugadorEnPartido(partido, jugador), usuario);
         return jugador;
@@ -444,7 +445,7 @@ public class ConvocatoriaPartidoService {
         if (partido.getEstadoPartido() == EstadoPartido.EN_PROCESO) {
             throw new IllegalArgumentException("Durante el partido solo puedes agregar un jugador para ocupar una posición vacía");
         }
-        Jugador jugador = jugadorDao.findByIdentificacion(identificacion.trim()).orElse(null);
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(identificacion.trim()).orElse(null);
         if (jugador == null) {
             Equipo equipo = equipoDelGestor(partido, usuario);
             if (equipo.getDelegado() == null || !identificacion.trim().equals(equipo.getDelegado().getIdentificacion())) {
@@ -455,6 +456,7 @@ public class ConvocatoriaPartidoService {
             jugador.setNombre(equipo.getDelegado().getNombre());
             jugador.setNumeroCelular(equipo.getDelegado().getNumeroCelular());
             jugador.setEquipo(equipo);
+            personaService.vincular(jugador);
             jugador = jugadorDao.save(jugador);
         }
         return agregar(partidoId, jugador.getId(), titular, numeroUniforme, usuarioId);
@@ -1176,12 +1178,9 @@ public class ConvocatoriaPartidoService {
         if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) {
             throw new IllegalArgumentException("El usuario jugador debe tener una identificación registrada");
         }
-        Jugador jugador = jugadorDao.findByIdentificacion(usuario.getIdentificacion()).orElseGet(() -> {
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(usuario.getIdentificacion()).orElseGet(() -> {
             Jugador nuevo = new Jugador();
-            nuevo.setIdentificacion(usuario.getIdentificacion());
-            nuevo.setNombre(usuario.getNombre());
-            nuevo.setNumeroCelular(usuario.getNumeroCelular());
-            nuevo.setCorreoElectronico(usuario.getCorreoElectronico());
+            nuevo.setPersona(usuario.getPersona());
             nuevo.setEquipo(invitacion.getEquipo());
             nuevo.getEquipos().add(invitacion.getEquipo());
             return jugadorDao.save(nuevo);
@@ -1377,7 +1376,7 @@ public class ConvocatoriaPartidoService {
 
     private void validarNoJugador(Partido partido, Usuario usuario) {
         if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) return;
-        Jugador jugador = jugadorDao.findByIdentificacion(usuario.getIdentificacion()).orElse(null);
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(usuario.getIdentificacion()).orElse(null);
         if (jugador == null) return;
         boolean convocado = convocatoriaDao.findByPartidoAndJugador(partido, jugador).isPresent();
         boolean inscritoEnEquipos = jugador.getEquipos() != null && jugador.getEquipos().stream()

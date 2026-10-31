@@ -169,7 +169,7 @@ public class SancionJugadorTorneoService {
     private void notificarDelegados(Partido partido, String mensaje) {
         for (Equipo equipo : Stream.of(partido.getEquipoLocal(), partido.getEquipoVisitante()).filter(java.util.Objects::nonNull).toList()) {
             if (equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null) continue;
-            Usuario delegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+            Usuario delegado = usuarioDao.findByPersonaNumeroCelular(equipo.getDelegado().getNumeroCelular());
             if (delegado == null) continue;
             NotificacionUsuario notificacion = new NotificacionUsuario();
             notificacion.setUsuario(delegado);
@@ -184,7 +184,7 @@ public class SancionJugadorTorneoService {
 
     private void notificarJugador(Jugador jugador, String titulo, String mensaje, Torneo torneo, Equipo equipo) {
         if (jugador.getIdentificacion() == null) return;
-        Usuario usuario = usuarioDao.findByIdentificacion(jugador.getIdentificacion());
+        Usuario usuario = usuarioDao.findByPersonaIdentificacion(jugador.getIdentificacion());
         if (usuario == null) return;
         NotificacionUsuario notificacion = new NotificacionUsuario();
         notificacion.setUsuario(usuario);

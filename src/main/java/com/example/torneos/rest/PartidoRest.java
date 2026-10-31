@@ -33,6 +33,10 @@ public class PartidoRest {
     public List<List<Partido>> getTorneo(@PathVariable long idTorneo){
         return partidoService.getTorneo(idTorneo);
     }
+    @GetMapping("torneo/{idTorneo}/programados-terminados")
+    public List<DtoPartidoResumen> getPartidosProgramadosYTerminados(@PathVariable long idTorneo) {
+        return partidoService.getPartidosProgramadosYTerminados(idTorneo);
+    }
     @GetMapping("torneo/fase-actual/{idTorneo}/{faseActual}")
     public List<List<Partido>> getTorneoFaseActual(@PathVariable long idTorneo, @PathVariable FaseActual faseActual){
         return partidoService.getTorneoFaseActual(idTorneo, faseActual);

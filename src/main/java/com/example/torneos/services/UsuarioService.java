@@ -22,6 +22,8 @@ public class UsuarioService {
     @Autowired
     private PersonaDao personaDao;
     @Autowired
+    private PersonaService personaService;
+    @Autowired
     private PasswordEncoder passwordEncoder;
     @Autowired
     private JwtTokenService jwtTokenService;
@@ -43,6 +45,7 @@ public class UsuarioService {
         if (usuario.getTipoUsuario() == com.example.torneos.enums.TipoUsuario.ORGANIZADOR && !permitirRegistroOrganizador) {
             throw new IllegalArgumentException("El registro público no permite crear cuentas de organizador");
         }
+        personaService.vincular(usuario);
         return usuarioDao.save(usuario);
     }
     public List<Usuario> getAll() {
@@ -50,7 +53,7 @@ public class UsuarioService {
     }
     public DtoUsuarioInfo iniciarSesion(DtoLoginInfo dtoLoginInfo) {
         String identificacion = dtoLoginInfo.getIdentificacion() == null ? "" : dtoLoginInfo.getIdentificacion().trim();
-        Usuario usuario = usuarioDao.findByIdentificacion(identificacion);
+        Usuario usuario = usuarioDao.findByPersonaIdentificacion(identificacion);
         if (usuario != null && usuario.getContrasena() != null && coincideContrasena(usuario.getContrasena(), dtoLoginInfo.getContrasena())) {
             DtoUsuarioInfo usuarioInfo = new DtoUsuarioInfo();
             usuarioInfo.setId(usuario.getId());
@@ -98,18 +101,19 @@ public class UsuarioService {
             throw  new IllegalArgumentException("No existe Usuario con id: " + usuario.getId());
         }
         Usuario usuarioDB = optUsuario.get();
-        usuarioDB.setNombre(usuario.getNombre());
-        usuarioDB.setCorreoElectronico(usuario.getCorreoElectronico());
+        Persona persona = usuarioDB.getPersona();
+        persona.setNombre(usuario.getNombre());
+        persona.setCorreoElectronico(usuario.getCorreoElectronico());
         if (usuario.getFoto() != null) {
-            usuarioDB.setFoto(usuario.getFoto());
+            persona.setFoto(usuario.getFoto());
         }
-        usuarioDB.setIdentificacion(usuario.getIdentificacion());
-        usuarioDB.setNumeroCelular(usuario.getNumeroCelular());
-        usuarioDB.setNumeroTelefono(usuario.getNumeroTelefono());
-        usuarioDB.setWhatsappActivo(usuario.isWhatsappActivo());
+        persona.setIdentificacion(usuario.getIdentificacion());
+        persona.setNumeroCelular(usuario.getNumeroCelular());
+        persona.setNumeroTelefono(usuario.getNumeroTelefono());
+        persona.setWhatsappActivo(usuario.isWhatsappActivo());
         usuarioDB.setUbicacion(usuario.getUbicacion());
         if (usuario.getFechaNacimiento() != null) {
-            usuarioDB.setFechaNacimiento(usuario.getFechaNacimiento());
+            persona.setFechaNacimiento(usuario.getFechaNacimiento());
         }
         return usuarioDao.save(usuarioDB);
     }

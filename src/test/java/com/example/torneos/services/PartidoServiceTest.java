@@ -13,6 +13,7 @@ import com.example.torneos.entities.ParticipacionEquipoTorneo;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.ConvocatoriaPartido;
+import com.example.torneos.entities.ParticipacionJugadorTorneo;
 import com.example.torneos.entities.Torneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.enums.EstadoPartido;
@@ -134,12 +135,40 @@ class PartidoServiceTest {
         when(usuarioDao.findById(8L)).thenReturn(Optional.of(ayudante));
         when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, ayudante))
                 .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
-        lenient().when(jugadorDao.findByIdentificacion("AYUDANTE-8")).thenReturn(Optional.of(jugador));
+        lenient().when(jugadorDao.findByPersonaIdentificacion("AYUDANTE-8")).thenReturn(Optional.of(jugador));
         lenient().when(participacionJugadorDao.findByTorneoAndJugador(torneo, jugador)).thenReturn(Optional.empty());
         lenient().when(convocatoriaDao.findByPartidoAndJugador(partido, jugador))
                 .thenReturn(Optional.of(new ConvocatoriaPartido()));
 
         assertTrue(partidoService.puedeGestionarPartido(30L, 8L));
+    }
+
+    @Test
+    void cancelarPartido_permiteAyudanteQuePerteneceAUnEquipoDelPartido() {
+        Usuario ayudante = new Usuario();
+        ayudante.setId(8L);
+        ayudante.setIdentificacion("AYUDANTE-8");
+        Partido partido = new Partido();
+        partido.setTorneo(torneo);
+        partido.setEquipoLocal(equipoLocal);
+        partido.setEquipoVisitante(equipoVisitante);
+        Jugador jugador = new Jugador();
+        jugador.setId(80L);
+        jugador.setIdentificacion("AYUDANTE-8");
+        ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
+        participacion.setEquipo(equipoLocal);
+        when(partidoDao.findById(30L)).thenReturn(Optional.of(partido));
+        when(usuarioDao.findById(8L)).thenReturn(Optional.of(ayudante));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(torneo, ayudante))
+                .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
+        lenient().when(jugadorDao.findByPersonaIdentificacion("AYUDANTE-8")).thenReturn(Optional.of(jugador));
+        lenient().when(participacionJugadorDao.findByTorneoAndJugador(torneo, jugador)).thenReturn(Optional.of(participacion));
+
+        Partido resultado = partidoService.cancelarPartido(30L, 8L);
+
+        assertEquals(EstadoPartido.PENDIENTE, resultado.getEstadoPartido());
+        verify(partidoDao).save(partido);
+        verify(jugadorDao, never()).findByPersonaIdentificacion("AYUDANTE-8");
     }
 
     private ParticipacionEquipoTorneo crearParticipacion(Equipo equipo) {

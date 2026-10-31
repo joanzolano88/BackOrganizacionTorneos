@@ -83,6 +83,9 @@ class EquipoServiceTest {
     @Mock
     private AyudanteTorneoDao ayudanteTorneoDao;
 
+    @Mock
+    private PersonaService personaService;
+
     @InjectMocks
     private EquipoService equipoService;
 
@@ -129,7 +132,7 @@ class EquipoServiceTest {
         lenient().when(personaDao.existsById(any(Long.class))).thenReturn(false);
         lenient().when(personaDao.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(personaDao.findAll()).thenReturn(Collections.emptyList());
-        lenient().when(usuarioDao.findByNumeroCelular("3001234567")).thenReturn(usuario);
+        lenient().when(usuarioDao.findByPersonaNumeroCelular("3001234567")).thenReturn(usuario);
         when(equipoDao.findById(100L)).thenReturn(Optional.of(solicitud));
         when(participacionEquipoDao.findByEquipoAndTorneo(solicitud, torneo)).thenReturn(Optional.empty());
         when(participacionEquipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
@@ -157,7 +160,7 @@ class EquipoServiceTest {
         when(participacionEquipoDao.findByTorneo(torneo)).thenReturn(Collections.emptyList());
         when(personaDao.findByIdentificacion("D-100")).thenReturn(Optional.empty());
         when(personaDao.findByNumeroCelular("3001234567")).thenReturn(Optional.empty());
-        when(jugadorDao.findByIdentificacion("J-100")).thenReturn(Optional.empty());
+        when(jugadorDao.findByPersonaIdentificacion("J-100")).thenReturn(Optional.empty());
         when(equipoDao.save(any(Equipo.class))).thenAnswer(invocation -> {
             Equipo equipo = invocation.getArgument(0);
             equipo.setId(100L);
@@ -290,7 +293,7 @@ class EquipoServiceTest {
         lenient().when(personaDao.existsById(any(Long.class))).thenReturn(false);
         lenient().when(personaDao.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(personaDao.findAll()).thenReturn(Collections.emptyList());
-        lenient().when(usuarioDao.findByNumeroCelular("3001234567")).thenReturn(usuario);
+        lenient().when(usuarioDao.findByPersonaNumeroCelular("3001234567")).thenReturn(usuario);
         when(torneoDao.findById(11L)).thenReturn(Optional.of(segundoTorneo));
         when(equipoDao.findById(77L)).thenReturn(Optional.of(equipoGuardado));
         when(participacionEquipoDao.findByEquipoAndTorneo(equipoGuardado, torneo)).thenReturn(Optional.empty());
@@ -363,7 +366,7 @@ class EquipoServiceTest {
         when(participacionEquipoDao.save(any(ParticipacionEquipoTorneo.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Usuario usuarioDelegado = new Usuario();
         usuarioDelegado.setNumeroCelular(delegado.getNumeroCelular());
-        when(usuarioDao.findByNumeroCelular(delegado.getNumeroCelular())).thenReturn(usuarioDelegado);
+        when(usuarioDao.findByPersonaNumeroCelular(delegado.getNumeroCelular())).thenReturn(usuarioDelegado);
         when(notificacionDao.save(any(NotificacionUsuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Equipo resultado = equipoService.aceptarSolicitud(35L, 8L);
@@ -426,7 +429,7 @@ class EquipoServiceTest {
         usuario.setNumeroCelular("3001234567");
         usuario.setUbicacion("Pasto");
 
-        when(usuarioDao.findByNumeroCelular("3001234567")).thenReturn(usuario);
+        when(usuarioDao.findByPersonaNumeroCelular("3001234567")).thenReturn(usuario);
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> equipoService.saveSolicitud(solicitud, 5L));
@@ -505,7 +508,7 @@ class EquipoServiceTest {
         byte[] escudo = new byte[] { 1, 2, 3 };
         when(equipoDao.findById(25L)).thenReturn(Optional.of(equipo));
         when(personaDao.findById(6L)).thenReturn(Optional.of(nuevoDelegado));
-        when(usuarioDao.findByNumeroCelular("3007654321")).thenReturn(cuentaNuevoDelegado);
+        when(usuarioDao.findByPersonaNumeroCelular("3007654321")).thenReturn(cuentaNuevoDelegado);
         when(equipoDao.existsByDelegado(nuevoDelegado)).thenReturn(false);
         when(equipoDao.save(any(Equipo.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

@@ -124,7 +124,7 @@ public class TorenoService {
     public DtoAyudanteTorneo agregarAyudante(long torneoId, long usuarioId, String identificacion) {
         Torneo torneo = torneoDao.findById(torneoId).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
         Usuario propietario = validarPropietario(torneo, usuarioId);
-        Usuario ayudante = usuarioDao.findByIdentificacion(identificacion == null ? "" : identificacion.trim());
+        Usuario ayudante = usuarioDao.findByPersonaIdentificacion(identificacion == null ? "" : identificacion.trim());
         if (ayudante == null) throw new IllegalArgumentException("No existe un perfil con esa identificación");
         if (ayudante.getId() == propietario.getId()) throw new IllegalArgumentException("El organizador ya tiene permisos de gestión");
         AyudanteTorneo relacion = ayudanteTorneoDao.findByTorneoAndUsuario(torneo, ayudante).orElseGet(() -> {

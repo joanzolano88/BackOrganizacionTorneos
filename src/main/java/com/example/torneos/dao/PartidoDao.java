@@ -29,6 +29,7 @@ public interface PartidoDao extends JpaRepository<Partido, Long> {
     List<Partido> findByTorneo(Torneo torneo);
 
     List<Partido> findByTorneoAndEquipoLocal(Torneo torneo, Equipo equipo);
+    List<Partido> findByTorneoAndEstadoPartidoIn(Torneo torneo, List<EstadoPartido> estados);
     @Transactional
     List<Partido> findByEstadoPartido(EstadoPartido estado);
     @Transactional

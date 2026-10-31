@@ -65,7 +65,7 @@ class PagoServiceTest {
         when(pagoDao.save(any(Pago.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(pagoDao.buscarDto(0L)).thenReturn(new DtoPago(0L, 25000, TipoPago.ARBITRAJE, null, "Fecha 1", null,
             4L, "Torneo Prueba", 3L, "Equipo Prueba", "3001234567", null, null, null));
-        when(usuarioDao.findByNumeroCelular("3001234567")).thenReturn(delegadoUsuario);
+        when(usuarioDao.findByPersonaNumeroCelular("3001234567")).thenReturn(delegadoUsuario);
         when(notificacionDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         Pago pago = new Pago();

@@ -68,6 +68,8 @@ public class EquipoService {
     private InvitacionEquipoDao invitacionEquipoDao;
     @Autowired
     private AyudanteTorneoDao ayudanteTorneoDao;
+    @Autowired
+    private PersonaService personaService;
 
     private boolean permiteGestionSolicitudes(Torneo torneo) {
         return torneo != null && torneo.getEstadoTorneo() != null &&
@@ -103,7 +105,7 @@ public class EquipoService {
             usuario = usuarioDao.findById(delegado.getId()).orElse(null);
         }
         if (usuario == null && delegado.getNumeroCelular() != null && !delegado.getNumeroCelular().isBlank()) {
-            usuario = usuarioDao.findByNumeroCelular(delegado.getNumeroCelular());
+            usuario = usuarioDao.findByPersonaNumeroCelular(delegado.getNumeroCelular());
         }
 
         if (usuario != null) {
@@ -221,7 +223,7 @@ public class EquipoService {
         if (delegadoSolicitante.getNumeroCelular() == null || delegadoSolicitante.getNumeroCelular().isBlank()) {
             throw new IllegalArgumentException("El delegado debe tener un número de celular registrado");
         }
-        Usuario usuarioDelegado = usuarioDao.findByNumeroCelular(delegadoSolicitante.getNumeroCelular());
+        Usuario usuarioDelegado = usuarioDao.findByPersonaNumeroCelular(delegadoSolicitante.getNumeroCelular());
         if (usuarioDelegado == null || usuarioDelegado.getUbicacion() == null || usuarioDelegado.getUbicacion().isBlank()) {
             throw new IllegalArgumentException("El delegado debe tener una ubicación registrada para enviar solicitudes");
         }
@@ -301,8 +303,8 @@ public class EquipoService {
         validarPerfilDisponible(delegadoPerfil, TipoUsuario.DELEGADO);
         for (DtoRegistroPlanilla.Perfil jugador : perfilesJugadores) {
             validarPerfilDisponible(jugador, TipoUsuario.JUGADOR);
-            Usuario cuentaExistente = usuarioDao.findByIdentificacion(jugador.getIdentificacion());
-            Jugador jugadorExistente = jugadorDao.findByIdentificacion(jugador.getIdentificacion()).orElse(null);
+            Usuario cuentaExistente = usuarioDao.findByPersonaIdentificacion(jugador.getIdentificacion());
+            Jugador jugadorExistente = jugadorDao.findByPersonaIdentificacion(jugador.getIdentificacion()).orElse(null);
             if (jugadorExistente != null && participacionDao.findByTorneoAndJugador(torneo, jugadorExistente).isPresent()) {
                 throw new IllegalArgumentException("El jugador " + jugador.getIdentificacion() + " ya está inscrito en este torneo");
             }
@@ -344,10 +346,9 @@ public class EquipoService {
 
         for (DtoRegistroPlanilla.Perfil perfilJugador : perfilesJugadores) {
             Usuario cuentaJugador = crearOReutilizarPerfil(perfilJugador, TipoUsuario.JUGADOR);
-            Jugador jugador = jugadorDao.findByIdentificacion(perfilJugador.getIdentificacion()).orElseGet(() -> {
+            Jugador jugador = jugadorDao.findByPersonaIdentificacion(perfilJugador.getIdentificacion()).orElseGet(() -> {
                 Jugador nuevo = new Jugador();
-                nuevo.setNombre(cuentaJugador.getNombre());
-                nuevo.setIdentificacion(cuentaJugador.getIdentificacion());
+                nuevo.setPersona(cuentaJugador.getPersona());
                 nuevo.setEstadoJugador(com.example.torneos.enums.EstadoJugador.ACTIVO);
                 return nuevo;
             });
@@ -380,7 +381,7 @@ public class EquipoService {
     }
 
     private void validarCelularDelegadoDisponible(DtoRegistroPlanilla.Perfil perfil) {
-        Usuario usuarioConCelular = usuarioDao.findByNumeroCelular(perfil.getNumeroCelular());
+        Usuario usuarioConCelular = usuarioDao.findByPersonaNumeroCelular(perfil.getNumeroCelular());
         if (usuarioConCelular != null &&
                 !perfil.getIdentificacion().equals(usuarioConCelular.getIdentificacion())) {
             throw new IllegalArgumentException("El número de celular del delegado ya pertenece a otro usuario");
@@ -396,14 +397,14 @@ public class EquipoService {
     }
 
     private void validarPerfilDisponible(DtoRegistroPlanilla.Perfil perfil, TipoUsuario tipoUsuario) {
-        Usuario existente = usuarioDao.findByIdentificacion(perfil.getIdentificacion());
+        Usuario existente = usuarioDao.findByPersonaIdentificacion(perfil.getIdentificacion());
         if (existente != null && existente.getTipoUsuario() != tipoUsuario) {
             throw new IllegalArgumentException("La identificación " + perfil.getIdentificacion() + " ya pertenece a otro tipo de perfil");
         }
     }
 
     private Usuario crearOReutilizarPerfil(DtoRegistroPlanilla.Perfil perfil, TipoUsuario tipoUsuario) {
-        Usuario existente = usuarioDao.findByIdentificacion(perfil.getIdentificacion());
+        Usuario existente = usuarioDao.findByPersonaIdentificacion(perfil.getIdentificacion());
         if (existente != null) return existente;
         Usuario nuevo = new Usuario();
         nuevo.setNombre(perfil.getNombre());
@@ -411,6 +412,7 @@ public class EquipoService {
         nuevo.setContrasena(perfil.getIdentificacion());
         nuevo.setTipoUsuario(tipoUsuario);
         nuevo.setNumeroCelular(perfil.getNumeroCelular());
+        personaService.vincular(nuevo);
         return usuarioDao.save(nuevo);
     }
 
@@ -513,7 +515,7 @@ public class EquipoService {
     private void notificarAceptacion(ParticipacionEquipoTorneo participacion) {
         Persona delegado = participacion.getEquipo().getDelegado();
         if (delegado == null || delegado.getNumeroCelular() == null) return;
-        Usuario usuario = usuarioDao.findByNumeroCelular(delegado.getNumeroCelular());
+        Usuario usuario = usuarioDao.findByPersonaNumeroCelular(delegado.getNumeroCelular());
         if (usuario == null) return;
         NotificacionUsuario notificacion = new NotificacionUsuario();
         notificacion.setUsuario(usuario);
@@ -746,8 +748,8 @@ public class EquipoService {
         Equipo equipo = equipo(idEquipo);
         validarDelegado(equipo, idUsuario);
         String identificacionLimpia = identificacion == null ? "" : identificacion.trim();
-        Jugador jugador = jugadorDao.findByIdentificacion(identificacionLimpia).orElseGet(() -> {
-            Usuario cuenta = usuarioDao.findByIdentificacion(identificacionLimpia);
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(identificacionLimpia).orElseGet(() -> {
+            Usuario cuenta = usuarioDao.findByPersonaIdentificacion(identificacionLimpia);
             if (cuenta == null) {
                 throw new IllegalArgumentException("No se encontró una cuenta con esa identificación");
             }
@@ -763,7 +765,7 @@ public class EquipoService {
         invitacion.setEstado("PENDIENTE");
         invitacion.setCreadaEn(java.time.LocalDateTime.now());
         InvitacionEquipo guardada = invitacionEquipoDao.save(invitacion);
-        Usuario jugadorUsuario = usuarioDao.findByIdentificacion(jugador.getIdentificacion());
+        Usuario jugadorUsuario = usuarioDao.findByPersonaIdentificacion(jugador.getIdentificacion());
         if (jugadorUsuario != null) {
             NotificacionUsuario notificacion = new NotificacionUsuario();
             notificacion.setUsuario(jugadorUsuario);
@@ -813,7 +815,7 @@ public class EquipoService {
 
     private void notificarAccionDelegado(Equipo equipo, String titulo, String mensaje, String referenciaTipo, Long referenciaId) {
         if (equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null) return;
-        Usuario delegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+        Usuario delegado = usuarioDao.findByPersonaNumeroCelular(equipo.getDelegado().getNumeroCelular());
         if (delegado == null) return;
         NotificacionUsuario notificacion = new NotificacionUsuario();
         notificacion.setUsuario(delegado);
@@ -836,8 +838,8 @@ public class EquipoService {
         Equipo equipo = equipo(idEquipo);
         validarDelegado(equipo, idUsuario);
         String identificacionLimpia = identificacion == null ? "" : identificacion.trim();
-        return jugadorDao.findByIdentificacion(identificacionLimpia).orElseGet(() -> {
-            Usuario cuenta = usuarioDao.findByIdentificacion(identificacionLimpia);
+        return jugadorDao.findByPersonaIdentificacion(identificacionLimpia).orElseGet(() -> {
+            Usuario cuenta = usuarioDao.findByPersonaIdentificacion(identificacionLimpia);
             if (cuenta == null) {
                 throw new IllegalArgumentException("No se encontró una cuenta con esa identificación");
             }
@@ -900,14 +902,9 @@ public class EquipoService {
     }
 
     private Jugador jugadorPorUsuario(Usuario usuario) {
-        return jugadorDao.findByIdentificacion(usuario.getIdentificacion()).orElseGet(() -> {
+        return jugadorDao.findByPersonaIdentificacion(usuario.getIdentificacion()).orElseGet(() -> {
             Jugador jugador = new Jugador();
-            jugador.setIdentificacion(usuario.getIdentificacion());
-            jugador.setNombre(usuario.getNombre());
-            jugador.setNumeroCelular(usuario.getNumeroCelular());
-            jugador.setNumeroTelefono(usuario.getNumeroTelefono());
-            jugador.setCorreoElectronico(usuario.getCorreoElectronico());
-            jugador.setFoto(usuario.getFoto());
+            jugador.setPersona(usuario.getPersona());
             jugador.setEstadoJugador(com.example.torneos.enums.EstadoJugador.ACTIVO);
             return jugadorDao.save(jugador);
         });
@@ -1036,7 +1033,7 @@ public class EquipoService {
         if (nuevoDelegado.getNumeroCelular() == null || nuevoDelegado.getNumeroCelular().isBlank()) {
             throw new IllegalArgumentException("El delegado seleccionado no tiene un celular asociado");
         }
-        Usuario cuentaNuevoDelegado = usuarioDao.findByNumeroCelular(nuevoDelegado.getNumeroCelular());
+        Usuario cuentaNuevoDelegado = usuarioDao.findByPersonaNumeroCelular(nuevoDelegado.getNumeroCelular());
         if (cuentaNuevoDelegado == null || cuentaNuevoDelegado.getTipoUsuario() != TipoUsuario.DELEGADO) {
             throw new IllegalArgumentException("La persona seleccionada no tiene una cuenta de delegado");
         }

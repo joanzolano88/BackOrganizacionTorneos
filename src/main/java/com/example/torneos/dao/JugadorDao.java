@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface JugadorDao extends JpaRepository<Jugador, Long> {
-    Optional<Jugador> findByIdentificacion(String identificacion);
-    Optional<Jugador> findByNumeroCelular(String numeroCelular);
+    Optional<Jugador> findByPersonaIdentificacion(String identificacion);
+    Optional<Jugador> findByPersonaNumeroCelular(String numeroCelular);
     List<Jugador> findByEquipo(Equipo equipo);
     List<Jugador> findByEquiposContaining(Equipo equipo);
 }

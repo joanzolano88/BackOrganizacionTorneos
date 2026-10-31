@@ -10,6 +10,7 @@ import com.example.torneos.dao.EquipoDao;
 import com.example.torneos.dao.TorneoDao;
 import com.example.torneos.dao.JugadorDao;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.dao.ParticipacionEquipoTorneoDao;
 import com.example.torneos.dao.AyudanteTorneoDao;
 import com.example.torneos.entities.Equipo;
 import com.example.torneos.entities.Persona;
@@ -44,6 +45,7 @@ public class UsuarioRest {
     @Autowired private TorneoDao torneoDao;
     @Autowired private JugadorDao jugadorDao;
     @Autowired private ParticipacionJugadorTorneoDao participacionDao;
+    @Autowired private ParticipacionEquipoTorneoDao participacionEquipoDao;
     @Autowired private AyudanteTorneoDao ayudanteTorneoDao;
     @Autowired private NotificacionUsuarioDao notificacionDao;
 
@@ -90,8 +92,19 @@ public class UsuarioRest {
         Persona delegado = usuario.getNumeroCelular() == null ? null : usuarioService.buscarPersonaPorCelular(usuario.getNumeroCelular());
         List<Equipo> equiposDelegado = delegado == null ? List.of() : equipoDao.findByDelegado(delegado);
         respuesta.put("equiposDelegado", equiposDelegado);
+        respuesta.put("participacionesDelegado", equiposDelegado.isEmpty()
+                ? List.of()
+                : participacionEquipoDao.findByEquipoIn(equiposDelegado).stream()
+                        .map(participacion -> Map.of(
+                        "torneo", Map.of(
+                                "id", participacion.getTorneo().getId(),
+                                "nombre", participacion.getTorneo().getNombre() == null ? "" : participacion.getTorneo().getNombre()),
+                        "equipo", Map.of(
+                                "id", participacion.getEquipo().getId(),
+                                "nombre", participacion.getEquipo().getNombre() == null ? "" : participacion.getEquipo().getNombre())))
+                .toList());
         if (usuario.getIdentificacion() != null) {
-            jugadorDao.findByIdentificacion(usuario.getIdentificacion()).ifPresent(jugador -> {
+            jugadorDao.findByPersonaIdentificacion(usuario.getIdentificacion()).ifPresent(jugador -> {
                 respuesta.put("jugador", jugador);
                 List<com.example.torneos.entities.ParticipacionJugadorTorneo> participaciones = participacionDao.findByJugador(jugador);
                 Map<Long, com.example.torneos.entities.Torneo> torneoPorEquipo = new HashMap<>();

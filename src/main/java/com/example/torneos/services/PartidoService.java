@@ -86,6 +86,18 @@ public class PartidoService {
         }
         return partidosTorneo;
     }
+
+    @Transactional(readOnly = true)
+    public List<DtoPartidoResumen> getPartidosProgramadosYTerminados(long idTorneo) {
+        Torneo torneo = torneoDao.findById(idTorneo)
+                .orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
+        return partidoDao.findByTorneoAndEstadoPartidoIn(torneo,
+                        List.of(EstadoPartido.PROGRAMADO, EstadoPartido.TERMINADO)).stream()
+                .sorted(Comparator.comparing(Partido::getFechaPartido,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(this::resumenPartido)
+                .toList();
+    }
     public List<List<Partido>> getTorneoFaseActual(long idTorneo, FaseActual faseActual) {
         Torneo torneo = torneoDao.findById(idTorneo).get();
         List<List<Partido>> partidosTorneo = new ArrayList<>();
@@ -373,7 +385,7 @@ public class PartidoService {
         for (Equipo equipo : List.of(partido.getEquipoLocal(), partido.getEquipoVisitante())) {
             if (equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null ||
                     !celularesNotificados.add(equipo.getDelegado().getNumeroCelular())) continue;
-            Usuario delegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+            Usuario delegado = usuarioDao.findByPersonaNumeroCelular(equipo.getDelegado().getNumeroCelular());
             if (delegado == null) continue;
             NotificacionUsuario notificacion = new NotificacionUsuario();
             notificacion.setUsuario(delegado);
@@ -477,7 +489,7 @@ public class PartidoService {
             throw new IllegalArgumentException("La programación automática es obligatoria");
         }
         Torneo torneo = torneoDao.findById(idTorneo).orElseThrow(() -> new IllegalArgumentException("El torneo no existe"));
-        validarPropietarioTorneo(torneo, usuarioId);
+        validarGestorProgramacionTorneo(torneo, usuarioId);
 
         List<Cancha> canchas = canchaDao.findByTorneo(torneo);
         if (canchas.isEmpty()) {
@@ -668,7 +680,7 @@ public class PartidoService {
             if (equipo == null || equipo.getDelegado() == null || equipo.getDelegado().getNumeroCelular() == null) {
                 continue;
             }
-            Usuario delegado = usuarioDao.findByNumeroCelular(equipo.getDelegado().getNumeroCelular());
+            Usuario delegado = usuarioDao.findByPersonaNumeroCelular(equipo.getDelegado().getNumeroCelular());
             if (delegado == null) {
                 continue;
             }
@@ -838,20 +850,6 @@ public class PartidoService {
     private void validarGestorPartido(Partido partido, long usuarioId) {
         Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
         validarEsOrganizadorOAyudante(partido, usuario);
-        if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) return;
-        jugadorDao.findByIdentificacion(usuario.getIdentificacion()).ifPresent(jugador -> {
-            boolean porParticipacion = participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador)
-                    .map(item -> partido.getEquipoLocal() != null && item.getEquipo().getId() == partido.getEquipoLocal().getId()
-                            || partido.getEquipoVisitante() != null && item.getEquipo().getId() == partido.getEquipoVisitante().getId())
-                    .orElse(false);
-            boolean porRelacionEquipo = jugador.getEquipos() != null && jugador.getEquipos().stream()
-                    .anyMatch(equipo -> partido.getEquipoLocal() != null && equipo.getId() == partido.getEquipoLocal().getId()
-                            || partido.getEquipoVisitante() != null && equipo.getId() == partido.getEquipoVisitante().getId());
-            boolean convocado = convocatoriaDao.findByPartidoAndJugador(partido, jugador).isPresent();
-            if (porParticipacion || porRelacionEquipo || convocado) {
-                throw new IllegalArgumentException("Un jugador de este partido no puede gestionarlo; debe hacerlo otro ayudante");
-            }
-        });
     }
 
     private void validarGestorPartidoParaEventos(Partido partido, long usuarioId) {
@@ -870,6 +868,17 @@ public class PartidoService {
         Usuario usuario = usuarioDao.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
         if (torneo == null || torneo.getEncargadoTorneo() == null || torneo.getEncargadoTorneo().getId() != usuario.getId()) {
             throw new IllegalArgumentException("Solo el organizador propietario puede generar partidos");
+        }
+    }
+
+    private void validarGestorProgramacionTorneo(Torneo torneo, long usuarioId) {
+        Usuario usuario = usuarioDao.findById(usuarioId)
+                .orElseThrow(() -> new IllegalArgumentException("El usuario no existe"));
+        boolean propietario = torneo != null && torneo.getEncargadoTorneo() != null
+                && torneo.getEncargadoTorneo().getId() == usuario.getId();
+        boolean ayudante = torneo != null && ayudanteTorneoDao.findByTorneoAndUsuario(torneo, usuario).isPresent();
+        if (!propietario && !ayudante) {
+            throw new IllegalArgumentException("Solo el organizador o un ayudante autorizado puede programar partidos");
         }
     }
 
