@@ -17,6 +17,9 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
     private static final List<String> DATOS_PERSONALES = List.of(
             "nombre", "foto", "identificacion", "numero_celular",
             "numero_telefono", "whatsapp_activo", "correo_electronico");
+    private static final List<String> COLUMNAS_PERSONALES_LEGADAS = List.of(
+            "nombre", "foto", "identificacion", "numero_celular",
+            "numero_telefono", "whatsapp_activo", "correo_electronico", "fecha_nacimiento");
 
     private final JdbcTemplate jdbcTemplate;
     private final PersonaDao personaDao;
@@ -35,6 +38,8 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
         eliminarUnicidadPersona("jugador");
         migrarTabla("usuario", true, true);
         migrarTabla("jugador", false, false);
+        permitirColumnasPersonalesLegadasNulas("usuario");
+        permitirColumnasPersonalesLegadasNulas("jugador");
     }
 
     private void sincronizarSecuenciaPersona() {
@@ -122,6 +127,14 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
                 throw new IllegalStateException("Nombre de restricción no válido durante la migración de personas");
             }
             jdbcTemplate.execute("ALTER TABLE " + tabla + " DROP CONSTRAINT " + restriccion);
+        }
+    }
+
+    private void permitirColumnasPersonalesLegadasNulas(String tabla) {
+        for (String columna : COLUMNAS_PERSONALES_LEGADAS) {
+            if (columnExists(tabla, columna)) {
+                jdbcTemplate.execute("ALTER TABLE " + tabla + " ALTER COLUMN " + columna + " DROP NOT NULL");
+            }
         }
     }
 }
