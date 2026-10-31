@@ -631,11 +631,29 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
-    void agregarEnPosicionVacia_rechazaAgregarTitularDuranteElPartido() {
+    void agregarEnPosicionVacia_permiteAgregarTitularEnEspacioVacioDuranteElPartido() {
         usuarioOrganizador();
-        assertThrows(IllegalArgumentException.class,
-                () -> service.agregarEnPosicionVacia(5L, 102L, 3, 12, 99L));
-        verify(convocatoriaDao, never()).save(any(ConvocatoriaPartido.class));
+        Jugador jugadorTardio = new Jugador();
+        jugadorTardio.setId(102L);
+        jugadorTardio.setEquipo(local);
+        when(jugadorDao.findById(102L)).thenReturn(Optional.of(jugadorTardio));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugadorTardio))
+                .thenReturn(Optional.of(participacion(jugadorTardio, local)));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of());
+        when(alineacionDao.findByPartidoAndEquipo(partido, local)).thenReturn(Optional.empty());
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventoDao.save(any(EventoPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConvocatoriaPartido convocatoria = service.agregarEnPosicionVacia(5L, 102L, 3, 12, 99L);
+
+        assertTrue(convocatoria.isTitular());
+        assertTrue(convocatoria.isFueTitular());
+        assertEquals(3, convocatoria.getPosicionAlineacion());
+        assertEquals(12, convocatoria.getNumeroUniforme());
+        verify(convocatoriaDao).save(convocatoria);
+        verify(eventoDao).save(any(EventoPartido.class));
     }
 
     @Test

@@ -239,8 +239,9 @@ public class ConvocatoriaPartidoService {
         Partido partido = partido(partidoId);
         Usuario usuario = usuario(usuarioId);
         validarGestor(partido, usuario);
-        if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO) {
-            throw new IllegalArgumentException("Los titulares solo se pueden agregar antes de iniciar el partido");
+        if (partido.getEstadoPartido() != EstadoPartido.PROGRAMADO
+                && partido.getEstadoPartido() != EstadoPartido.EN_PROCESO) {
+            throw new IllegalArgumentException("Solo se pueden agregar titulares antes o durante el partido");
         }
         if (numeroUniforme < 0 || numeroUniforme > 99) {
             throw new IllegalArgumentException("El número de uniforme debe estar entre 0 y 99");
