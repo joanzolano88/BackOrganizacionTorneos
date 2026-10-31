@@ -34,7 +34,9 @@ public class PagoService {
         boolean propietario = torneo.getEncargadoTorneo() != null && torneo.getEncargadoTorneo().getId() == usuario.getId();
         boolean delegado = equipoDelegadoEnTorneo(idTorneo, usuario);
         if (!propietario && !delegado) throw new IllegalArgumentException("No tienes permiso para consultar los pagos de este torneo");
-        return pagoDao.listarDtoPorTorneo(idTorneo);
+        return pagoDao.findByTorneo_IdOrderByFechaDesc(idTorneo).stream()
+                .map(this::convertirPagoDto)
+                .toList();
     }
 
     @Transactional
@@ -69,7 +71,29 @@ public class PagoService {
         if (pago.getFecha() == null) pago.setFecha(LocalDate.now());
         Pago guardado = pagoDao.save(pago);
         notificarDestinatario(guardado);
-        return pagoDao.buscarDto(guardado.getId());
+        return convertirPagoDto(guardado);
+    }
+
+    private DtoPago convertirPagoDto(Pago pago) {
+        Torneo torneo = pago.getTorneo();
+        Equipo equipo = pago.getEquipo();
+        Jugador jugador = pago.getJugador();
+        Persona delegado = equipo == null ? null : equipo.getDelegado();
+        return new DtoPago(
+                pago.getId(),
+                pago.getValor(),
+                pago.getTipo(),
+                pago.getFecha(),
+                pago.getConcepto(),
+                pago.getObservacion(),
+                torneo == null ? null : torneo.getId(),
+                torneo == null ? null : torneo.getNombre(),
+                equipo == null ? null : equipo.getId(),
+                equipo == null ? null : equipo.getNombre(),
+                delegado == null ? null : delegado.getNumeroCelular(),
+                jugador == null ? null : jugador.getId(),
+                jugador == null ? null : jugador.getNombre(),
+                jugador == null ? null : jugador.getNumeroCelular());
     }
 
     private boolean equipoDelegadoEnTorneo(long torneoId, Usuario usuario) {
