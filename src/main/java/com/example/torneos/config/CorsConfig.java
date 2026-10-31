@@ -11,6 +11,7 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/**")
                 .allowedOriginPatterns(
                         "https://front-org-tor.vercel.app",
+                        "https://orgtorn-*-torneos1.vercel.app",
                         "http://localhost:*",
                         "http://127.0.0.1:*",
                         "capacitor://localhost",
