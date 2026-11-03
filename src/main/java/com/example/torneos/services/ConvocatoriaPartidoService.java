@@ -1361,7 +1361,6 @@ public class ConvocatoriaPartidoService {
 
     private void validarGestorOrganizador(Partido partido, Usuario usuario) {
         validarEsOrganizadorOAyudante(partido, usuario);
-        validarNoJugador(partido, usuario);
     }
 
     private void validarGestorRegistroEventos(Partido partido, Usuario usuario) {
@@ -1373,23 +1372,6 @@ public class ConvocatoriaPartidoService {
                 partido.getTorneo().getEncargadoTorneo().getId() == usuario.getId();
         boolean ayudante = ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), usuario).isPresent();
         if (!propietario && !ayudante) throw new IllegalArgumentException("Solo el organizador o un ayudante puede gestionar el partido");
-    }
-
-    private void validarNoJugador(Partido partido, Usuario usuario) {
-        if (usuario.getIdentificacion() == null || usuario.getIdentificacion().isBlank()) return;
-        Jugador jugador = jugadorDao.findByPersonaIdentificacion(usuario.getIdentificacion()).orElse(null);
-        if (jugador == null) return;
-        boolean convocado = convocatoriaDao.findByPartidoAndJugador(partido, jugador).isPresent();
-        boolean inscritoEnEquipos = jugador.getEquipos() != null && jugador.getEquipos().stream()
-                .anyMatch(equipo -> partido.getEquipoLocal() != null && equipo.getId() == partido.getEquipoLocal().getId()
-                        || partido.getEquipoVisitante() != null && equipo.getId() == partido.getEquipoVisitante().getId());
-        boolean participacionTorneo = participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador)
-                .map(item -> partido.getEquipoLocal() != null && item.getEquipo().getId() == partido.getEquipoLocal().getId()
-                        || partido.getEquipoVisitante() != null && item.getEquipo().getId() == partido.getEquipoVisitante().getId())
-                .orElse(false);
-        if (convocado || inscritoEnEquipos || participacionTorneo) {
-            throw new IllegalArgumentException("Un jugador de este partido no puede gestionarlo; debe hacerlo otro ayudante");
-        }
     }
 
     private void validarEquipoDelDelegado(Partido partido, Equipo equipo, Usuario usuario) {

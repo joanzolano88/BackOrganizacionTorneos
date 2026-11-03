@@ -204,6 +204,19 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void listarSolicitudesSustitucion_permiteAlAyudanteQueTambienEsJugadorDelPartido() {
+        organizador.setIdentificacion("100");
+        when(usuarioDao.findById(99L)).thenReturn(Optional.of(organizador));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), organizador))
+                .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
+        when(solicitudSustitucionDao.findByPartidoOrderByCreadaEnDesc(partido)).thenReturn(List.of());
+
+        assertTrue(service.listarSolicitudesSustitucion(5L, 99L).isEmpty());
+
+        verify(solicitudSustitucionDao).findByPartidoOrderByCreadaEnDesc(partido);
+    }
+
+    @Test
     void listarSolicitudesSustitucion_delegadoDeOtroEquipoEsRechazado() {
         Usuario delegado = new Usuario();
         delegado.setId(51L);
