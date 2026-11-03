@@ -34,7 +34,8 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         if (!columnExists("usuario", "persona_id") || !columnExists("jugador", "persona_id")) return;
         sincronizarSecuenciaPersona();
-        sincronizarSecuenciaJugador();
+        sincronizarSecuenciaPerfil("usuario", "usuario_seq", "usuario_id_seq");
+        sincronizarSecuenciaPerfil("jugador", "jugador_seq", "jugador_id_seq");
         eliminarUnicidadPersona("usuario");
         eliminarUnicidadPersona("jugador");
         migrarTabla("usuario", true, true);
@@ -50,19 +51,25 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
                 Long.class);
     }
 
-    private void sincronizarSecuenciaJugador() {
+    private void sincronizarSecuenciaPerfil(String tabla, String... nombresSecuencia) {
+        if (!tabla.matches("usuario|jugador")) {
+            throw new IllegalArgumentException("Tabla no válida durante la sincronización de perfiles");
+        }
         List<String> secuencias = jdbcTemplate.queryForList(
                 "SELECT sequence_name FROM information_schema.sequences " +
                         "WHERE sequence_schema = current_schema() " +
-                        "AND sequence_name IN ('jugador_seq', 'jugador_id_seq')",
+                        "AND sequence_name IN (" +
+                        java.util.Arrays.stream(nombresSecuencia)
+                                .map(nombre -> "'" + nombre + "'")
+                                .collect(java.util.stream.Collectors.joining(", ")) + ")",
                 String.class);
         for (String secuencia : secuencias) {
-            if (!secuencia.matches("jugador_seq|jugador_id_seq")) {
-                throw new IllegalStateException("Nombre de secuencia no válido durante la migración de jugadores");
+            if (!List.of(nombresSecuencia).contains(secuencia)) {
+                throw new IllegalStateException("Nombre de secuencia no válido durante la migración de perfiles");
             }
             jdbcTemplate.queryForObject(
                     "SELECT setval('" + secuencia +
-                            "', COALESCE((SELECT MAX(id) FROM jugador), 0) + 1, false)",
+                            "', COALESCE((SELECT MAX(id) FROM " + tabla + "), 0) + 1, false)",
                     Long.class);
         }
     }

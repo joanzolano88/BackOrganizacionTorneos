@@ -47,15 +47,20 @@ class MigracionPersonaCompartidaTest {
     }
 
     @Test
-    void run_sincronizaSecuenciaDeJugadorCuandoExiste() {
+    void run_sincronizaSecuenciasDeUsuarioYJugadorCuandoExisten() {
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class)))
                 .thenReturn(1);
         when(jdbcTemplate.queryForObject(contains("setval"), eq(Long.class))).thenReturn(1L);
-        when(jdbcTemplate.queryForList(contains("information_schema.sequences"), eq(String.class)))
+        when(jdbcTemplate.queryForList(contains("usuario_seq"), eq(String.class)))
+                .thenReturn(List.of("usuario_seq"));
+        when(jdbcTemplate.queryForList(contains("jugador_seq"), eq(String.class)))
                 .thenReturn(List.of("jugador_seq"));
 
         new MigracionPersonaCompartida(jdbcTemplate, personaDao).run(applicationArguments);
 
+        verify(jdbcTemplate).queryForObject(
+                "SELECT setval('usuario_seq', COALESCE((SELECT MAX(id) FROM usuario), 0) + 1, false)",
+                Long.class);
         verify(jdbcTemplate).queryForObject(
                 "SELECT setval('jugador_seq', COALESCE((SELECT MAX(id) FROM jugador), 0) + 1, false)",
                 Long.class);
