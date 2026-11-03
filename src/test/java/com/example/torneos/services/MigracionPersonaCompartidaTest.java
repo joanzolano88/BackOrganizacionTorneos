@@ -8,6 +8,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -32,6 +34,7 @@ class MigracionPersonaCompartidaTest {
                 });
         when(jdbcTemplate.queryForObject(contains("setval"), eq(Long.class))).thenReturn(1L);
         lenient().when(jdbcTemplate.queryForList(anyString())).thenReturn(java.util.List.of());
+        lenient().when(jdbcTemplate.queryForList(anyString(), eq(String.class))).thenReturn(List.of());
         lenient().when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(Object[].class)))
                 .thenReturn(java.util.List.of());
 
@@ -41,5 +44,20 @@ class MigracionPersonaCompartidaTest {
                 "ALTER TABLE jugador ALTER COLUMN whatsapp_activo DROP NOT NULL");
         verify(jdbcTemplate).execute(
                 "ALTER TABLE usuario ALTER COLUMN whatsapp_activo DROP NOT NULL");
+    }
+
+    @Test
+    void run_sincronizaSecuenciaDeJugadorCuandoExiste() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class)))
+                .thenReturn(1);
+        when(jdbcTemplate.queryForObject(contains("setval"), eq(Long.class))).thenReturn(1L);
+        when(jdbcTemplate.queryForList(contains("information_schema.sequences"), eq(String.class)))
+                .thenReturn(List.of("jugador_seq"));
+
+        new MigracionPersonaCompartida(jdbcTemplate, personaDao).run(applicationArguments);
+
+        verify(jdbcTemplate).queryForObject(
+                "SELECT setval('jugador_seq', COALESCE((SELECT MAX(id) FROM jugador), 0) + 1, false)",
+                Long.class);
     }
 }

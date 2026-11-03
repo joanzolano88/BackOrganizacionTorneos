@@ -34,6 +34,7 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         if (!columnExists("usuario", "persona_id") || !columnExists("jugador", "persona_id")) return;
         sincronizarSecuenciaPersona();
+        sincronizarSecuenciaJugador();
         eliminarUnicidadPersona("usuario");
         eliminarUnicidadPersona("jugador");
         migrarTabla("usuario", true, true);
@@ -47,6 +48,23 @@ public class MigracionPersonaCompartida implements ApplicationRunner {
         jdbcTemplate.queryForObject(
                 "SELECT setval('persona_id_seq', COALESCE((SELECT MAX(id) FROM persona), 0) + 1, false)",
                 Long.class);
+    }
+
+    private void sincronizarSecuenciaJugador() {
+        List<String> secuencias = jdbcTemplate.queryForList(
+                "SELECT sequence_name FROM information_schema.sequences " +
+                        "WHERE sequence_schema = current_schema() " +
+                        "AND sequence_name IN ('jugador_seq', 'jugador_id_seq')",
+                String.class);
+        for (String secuencia : secuencias) {
+            if (!secuencia.matches("jugador_seq|jugador_id_seq")) {
+                throw new IllegalStateException("Nombre de secuencia no válido durante la migración de jugadores");
+            }
+            jdbcTemplate.queryForObject(
+                    "SELECT setval('" + secuencia +
+                            "', COALESCE((SELECT MAX(id) FROM jugador), 0) + 1, false)",
+                    Long.class);
+        }
     }
 
     private void migrarTabla(String tabla, boolean usuario, boolean priorizarDatos) {

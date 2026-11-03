@@ -9,6 +9,7 @@ import com.example.torneos.DTO.DtoSancionJugadorPartido;
 import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
 import com.example.torneos.DTO.DtoSolicitudSustitucion;
 import com.example.torneos.DTO.DtoRegistroJugadorConvocatoria;
+import com.example.torneos.DTO.DtoBusquedaJugadorEquipo;
 import com.example.torneos.entities.ConvocatoriaPartido;
 import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
@@ -80,6 +81,15 @@ public class ConvocatoriaPartidoRest {
                                                                @RequestBody DtoRegistroJugadorConvocatoria solicitud,
                                                                @AuthenticationPrincipal Long usuarioId) {
         return service.registrarJugadorEquipo(partidoId, equipoId, solicitud, usuarioId);
+    }
+
+    @GetMapping("/{partidoId}/equipos/{equipoId}/jugadores/buscar")
+    public DtoBusquedaJugadorEquipo buscarJugadorEquipo(@PathVariable long partidoId,
+                                                        @PathVariable long equipoId,
+                                                        @RequestParam String identificacion,
+                                                        @RequestParam(required = false) String nombre,
+                                                        @AuthenticationPrincipal Long usuarioId) {
+        return service.buscarJugadorParaEquipo(partidoId, equipoId, nombre, identificacion, usuarioId);
     }
 
     @GetMapping("/{partidoId}/jugador/identificacion/{identificacion}")

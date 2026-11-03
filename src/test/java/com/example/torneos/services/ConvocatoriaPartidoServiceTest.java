@@ -565,6 +565,80 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void buscarJugadorParaEquipo_permiteJugadorDeOtroEquipoQueAunNoHaJugado() {
+        usuarioOrganizador();
+        Jugador existente = new Jugador();
+        existente.setId(300L);
+        existente.setNombre("Jugador Existente");
+        existente.setIdentificacion("12345678");
+        ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
+        participacion.setEquipo(visitante);
+        when(jugadorDao.findByPersonaIdentificacion("12345678")).thenReturn(Optional.of(existente));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), existente))
+                .thenReturn(Optional.of(participacion));
+
+        var resultado = service.buscarJugadorParaEquipo(
+                5L, 10L, "Jugador", "12345678", 99L);
+
+        assertTrue(resultado.existente());
+        assertTrue(resultado.elegible());
+        assertEquals("Jugador Existente", resultado.nombre());
+        assertEquals("12345678", resultado.identificacion());
+    }
+
+    @Test
+    void registrarJugadorEquipo_reutilizaJugadorElegibleSinCrearCuentaNiOtroPerfil() {
+        usuarioOrganizador();
+        Jugador existente = new Jugador();
+        existente.setId(300L);
+        existente.setNombre("Jugador Existente");
+        existente.setIdentificacion("12345678");
+        existente.setEstadoJugador(EstadoJugador.ACTIVO);
+        existente.setEquipo(visitante);
+        ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
+        participacion.setTorneo(partido.getTorneo());
+        participacion.setJugador(existente);
+        participacion.setEquipo(visitante);
+        when(jugadorDao.findByPersonaIdentificacion("12345678")).thenReturn(Optional.of(existente));
+        when(usuarioDao.findByPersonaIdentificacion("12345678")).thenReturn(new Usuario());
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), existente))
+                .thenReturn(Optional.of(participacion));
+        when(jugadorDao.save(existente)).thenReturn(existente);
+        when(participacionDao.save(participacion)).thenReturn(participacion);
+
+        var registrada = service.registrarJugadorEquipo(
+                5L, 10L, new DtoRegistroJugadorConvocatoria("Jugador Existente", "12345678", true), 99L);
+
+        assertEquals(existente.getId(), registrada.id());
+        assertEquals(local, participacion.getEquipo());
+        assertEquals(visitante, participacion.getEquipoAnterior());
+        assertTrue(participacion.isCambioEquipo());
+        assertEquals(local, existente.getEquipo());
+        verify(usuarioDao, never()).save(any(Usuario.class));
+        verify(jugadorDao, times(1)).save(existente);
+    }
+
+    @Test
+    void registrarJugadorEquipo_rechazaJugadorQueYaDisputoConOtroEquipo() {
+        usuarioOrganizador();
+        Jugador existente = new Jugador();
+        existente.setId(300L);
+        existente.setIdentificacion("12345678");
+        ParticipacionJugadorTorneo participacion = new ParticipacionJugadorTorneo();
+        participacion.setEquipo(visitante);
+        participacion.setJugoPartido(true);
+        when(jugadorDao.findByPersonaIdentificacion("12345678")).thenReturn(Optional.of(existente));
+        when(participacionDao.findByTorneoAndJugador(partido.getTorneo(), existente))
+                .thenReturn(Optional.of(participacion));
+
+        assertThrows(IllegalArgumentException.class, () -> service.registrarJugadorEquipo(
+                5L, 10L, new DtoRegistroJugadorConvocatoria("Jugador Existente", "12345678", true), 99L));
+
+        verify(jugadorDao, never()).save(any(Jugador.class));
+        verify(participacionDao, never()).save(any(ParticipacionJugadorTorneo.class));
+    }
+
+    @Test
     void eliminarEventoGol_restaElMarcadorDelEquipoAnotador() {
         usuarioOrganizador();
         partido.setAnotacionesEquipoLocal(1);

@@ -9,6 +9,7 @@ import com.example.torneos.DTO.DtoCrearSolicitudSustitucion;
 import com.example.torneos.DTO.DtoSolicitudSustitucion;
 import com.example.torneos.DTO.DtoEventoPartido;
 import com.example.torneos.DTO.DtoRegistroJugadorConvocatoria;
+import com.example.torneos.DTO.DtoBusquedaJugadorEquipo;
 import com.example.torneos.dao.AlineacionEquipoPartidoDao;
 import com.example.torneos.dao.ConvocatoriaPartidoDao;
 import com.example.torneos.dao.EquipoDao;
@@ -29,6 +30,7 @@ import com.example.torneos.entities.InvitacionPartido;
 import com.example.torneos.entities.Jugador;
 import com.example.torneos.entities.Partido;
 import com.example.torneos.dao.ParticipacionJugadorTorneoDao;
+import com.example.torneos.entities.ParticipacionJugadorTorneo;
 import com.example.torneos.entities.Usuario;
 import com.example.torneos.entities.NotificacionUsuario;
 import com.example.torneos.entities.SolicitudSustitucionPartido;
@@ -335,20 +337,62 @@ public class ConvocatoriaPartidoService {
         if (nombre.isBlank() || identificacion.isBlank()) {
             throw new IllegalArgumentException("El nombre y la cédula del jugador son obligatorios");
         }
-        if (jugadorDao.findByPersonaIdentificacion(identificacion).isPresent()
-                || usuarioDao.findByPersonaIdentificacion(identificacion) != null) {
-            throw new IllegalArgumentException("Ya existe un perfil con esa cédula. Busca al jugador para agregarlo al partido.");
+
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(identificacion).orElse(null);
+        Usuario cuenta = usuarioDao.findByPersonaIdentificacion(identificacion);
+        boolean confirmarExistente = solicitud != null && solicitud.confirmarExistente();
+        if (jugador != null) {
+            if (!confirmarExistente) {
+                throw new IllegalArgumentException("Confirma que deseas agregar el jugador existente a este equipo");
+            }
+            ParticipacionJugadorTorneo participacion =
+                    participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador).orElse(null);
+            if (participacion != null && participacion.getEquipo().getId() != equipo.getId()) {
+                if (participacion.isJugoPartido()) {
+                    throw new IllegalArgumentException(
+                            "El jugador ya disputó un partido de este torneo con otro equipo");
+                }
+                if (participacion.isCambioEquipo()) {
+                    throw new IllegalArgumentException(
+                            "El jugador ya realizó su único cambio de equipo en este torneo");
+                }
+                participacion.setEquipoAnterior(participacion.getEquipo());
+                participacion.setEquipo(equipo);
+                participacion.setCambioEquipo(true);
+            } else if (participacion == null) {
+                participacion = new ParticipacionJugadorTorneo();
+                participacion.setTorneo(partido.getTorneo());
+                participacion.setJugador(jugador);
+                participacion.setEquipo(equipo);
+                participacion.setParticipando(false);
+                participacion.setJugoPartido(false);
+            }
+            if (jugador.getEstadoJugador() != EstadoJugador.INACTIVO) {
+                jugador.setEquipo(equipo);
+                if (jugador.getEquipos() == null) jugador.setEquipos(new java.util.HashSet<>());
+                jugador.getEquipos().add(equipo);
+                jugadorDao.save(jugador);
+                participacionDao.save(participacion);
+                return new DtoJugadorDisponiblePartido(
+                        jugador.getId(), jugador.getNombre(), jugador.getIdentificacion(), jugador.getNumeroCamiseta());
+            }
+            throw new IllegalArgumentException("El jugador está inactivo y no puede agregarse al equipo");
         }
 
-        Usuario cuenta = new Usuario();
-        cuenta.setNombre(nombre);
-        cuenta.setIdentificacion(identificacion);
-        cuenta.setContrasena(passwordEncoder.encode(identificacion));
-        cuenta.setTipoUsuario(TipoUsuario.JUGADOR);
-        personaService.vincular(cuenta);
-        usuarioDao.save(cuenta);
+        if (cuenta != null && !confirmarExistente) {
+            throw new IllegalArgumentException("Confirma que deseas crear el perfil de jugador para esta cuenta existente");
+        }
+        if (cuenta == null) {
+            cuenta = new Usuario();
+            cuenta.setNombre(nombre);
+            cuenta.setIdentificacion(identificacion);
+            cuenta.setContrasena(passwordEncoder.encode(identificacion));
+            cuenta.setTipoUsuario(TipoUsuario.JUGADOR);
+            personaService.vincular(cuenta);
+            usuarioDao.save(cuenta);
+        }
 
-        Jugador jugador = new Jugador();
+        jugador = new Jugador();
         jugador.setPersona(cuenta.getPersona());
         jugador.setEstadoJugador(EstadoJugador.ACTIVO);
         jugador.setEquipo(equipo);
@@ -367,6 +411,55 @@ public class ConvocatoriaPartidoService {
 
         return new DtoJugadorDisponiblePartido(
                 jugador.getId(), jugador.getNombre(), jugador.getIdentificacion(), jugador.getNumeroCamiseta());
+    }
+
+    @Transactional(readOnly = true)
+    public DtoBusquedaJugadorEquipo buscarJugadorParaEquipo(
+            long partidoId, long equipoId, String nombre, String identificacion, long usuarioId) {
+        Partido partido = partido(partidoId);
+        Usuario usuario = usuario(usuarioId);
+        validarGestor(partido, usuario);
+        validarEstadoEditable(partido);
+        Equipo equipo = equipoDelPartido(partido, equipoId);
+        validarEquipoDelDelegado(partido, equipo, usuario);
+
+        String cedula = identificacion == null ? "" : identificacion.trim();
+        if (cedula.isBlank()) {
+            throw new IllegalArgumentException("La cédula del jugador es obligatoria");
+        }
+        Jugador jugador = jugadorDao.findByPersonaIdentificacion(cedula).orElse(null);
+        Usuario cuenta = usuarioDao.findByPersonaIdentificacion(cedula);
+        if (jugador == null && cuenta == null) {
+            return new DtoBusquedaJugadorEquipo(
+                    false, true, null, nombre == null ? "" : nombre.trim(), cedula,
+                    "No existe un perfil con esta cédula");
+        }
+        if (jugador == null) {
+            return new DtoBusquedaJugadorEquipo(
+                    true, true, null, cuenta.getNombre(), cedula,
+                    "Ya existe una cuenta con esta cédula. Puedes crearle un perfil de jugador");
+        }
+
+        ParticipacionJugadorTorneo participacion =
+                participacionDao.findByTorneoAndJugador(partido.getTorneo(), jugador).orElse(null);
+        boolean puedeAgregar = true;
+        String mensaje = "Se encontró un jugador con esta cédula";
+        if (jugador.getEstadoJugador() == EstadoJugador.INACTIVO) {
+            puedeAgregar = false;
+            mensaje = "El jugador está inactivo y no puede agregarse al equipo";
+        } else if (participacion != null && participacion.getEquipo().getId() != equipo.getId()) {
+            if (participacion.isJugoPartido()) {
+                puedeAgregar = false;
+                mensaje = "El jugador ya disputó un partido de este torneo con otro equipo";
+            } else if (participacion.isCambioEquipo()) {
+                puedeAgregar = false;
+                mensaje = "El jugador ya realizó su único cambio de equipo en este torneo";
+            } else {
+                mensaje = "El jugador está inscrito con otro equipo, pero aún no ha disputado partidos";
+            }
+        }
+        return new DtoBusquedaJugadorEquipo(
+                true, puedeAgregar, jugador.getId(), jugador.getNombre(), jugador.getIdentificacion(), mensaje);
     }
 
     @Transactional(readOnly = true)
