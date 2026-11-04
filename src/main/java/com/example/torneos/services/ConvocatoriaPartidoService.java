@@ -137,7 +137,7 @@ public class ConvocatoriaPartidoService {
         validarGestor(partido, usuario);
         validarEstadoEditable(partido);
         Equipo equipo = equipoDelPartido(partido, equipoId);
-        validarEquipoDelDelegado(partido, equipo, usuario);
+        validarEquipoTactico(partido, equipo, usuario);
         validarPermisoAlineacionDurantePartido(partido, usuario);
         List<Integer> lineas = formacionDisponible(partido, formacion);
         if (lineas == null) {
@@ -186,7 +186,7 @@ public class ConvocatoriaPartidoService {
                 !Objects.equals(equipoPrimero.getId(), equipoSegundo.getId())) {
             throw new IllegalArgumentException("Los titulares deben pertenecer al mismo equipo");
         }
-        validarEquipoDelDelegado(partido, equipoPrimero, usuario);
+        validarEquipoTactico(partido, equipoPrimero, usuario);
         validarPermisoAlineacionDurantePartido(partido, usuario);
         int totalPosiciones = alineacionDao.findByPartidoAndEquipo(partido, equipoPrimero)
                 .map(AlineacionEquipoPartido::getFormacion)
@@ -218,7 +218,7 @@ public class ConvocatoriaPartidoService {
             throw new IllegalArgumentException("Solo puedes mover a una posición vacía a un titular");
         }
         Equipo equipo = equipoDeJugadorEnPartido(partido, convocatoria.getJugador());
-        validarEquipoDelDelegado(partido, equipo, usuario);
+        validarEquipoTactico(partido, equipo, usuario);
         validarPermisoAlineacionDurantePartido(partido, usuario);
         String formacion = formacionEquipo(partido, equipo);
         List<Integer> lineas = FORMACIONES.get(formacion);
@@ -1089,6 +1089,19 @@ public class ConvocatoriaPartidoService {
         if (dobleAmarilla && tipo != TipoEventoPartido.TARJETA_ROJA) {
             throw new IllegalArgumentException("La doble amarilla solo puede registrarse como tarjeta roja");
         }
+        List<EventoPartido> eventosExistentes = eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido);
+        boolean yaExpulsado = eventosExistentes.stream()
+                .anyMatch(evento -> evento.getTipo() == TipoEventoPartido.TARJETA_ROJA
+                        && evento.getJugador() != null
+                        && Objects.equals(evento.getJugador().getId(), jugador.getId()));
+        if (yaExpulsado) {
+            throw new IllegalArgumentException("El jugador ya fue expulsado de este partido");
+        }
+        boolean segundaAmarilla = tipo == TipoEventoPartido.TARJETA_AMARILLA
+                && eventosExistentes.stream()
+                        .filter(evento -> evento.getTipo() == TipoEventoPartido.TARJETA_AMARILLA)
+                        .filter(evento -> evento.getJugador() != null)
+                        .anyMatch(evento -> Objects.equals(evento.getJugador().getId(), jugador.getId()));
         minuto = minutoActual(partido, minuto);
         EventoPartido evento = guardarEvento(partido, jugador, tipo, minuto);
         evento.setDobleAmarilla(dobleAmarilla);
@@ -1096,6 +1109,17 @@ public class ConvocatoriaPartidoService {
         sancionService.registrarTarjeta(evento);
         if (tipo == TipoEventoPartido.TARJETA_ROJA) {
             convocatoriaDao.findByPartidoAndJugador(partido, jugador).ifPresent(convocatoria -> { convocatoria.setExpulsado(true); convocatoriaDao.save(convocatoria); });
+        }
+        if (segundaAmarilla) {
+            EventoPartido roja = guardarEvento(partido, jugador, TipoEventoPartido.TARJETA_ROJA, minuto);
+            roja.setDobleAmarilla(true);
+            roja = eventoDao.save(roja);
+            sancionService.registrarTarjeta(roja);
+            convocatoriaDao.findByPartidoAndJugador(partido, jugador).ifPresent(convocatoria -> {
+                convocatoria.setExpulsado(true);
+                convocatoriaDao.save(convocatoria);
+            });
+            return roja;
         }
         return evento;
     }
@@ -1344,8 +1368,15 @@ public class ConvocatoriaPartidoService {
     private void validarPermisoAlineacionDurantePartido(Partido partido, Usuario usuario) {
         if (partido.getEstadoPartido() == EstadoPartido.EN_PROCESO
                 && usuario.getTipoUsuario() != TipoUsuario.DELEGADO) {
-            throw new IllegalArgumentException("Durante el partido solo el delegado puede modificar la formación o las posiciones de su equipo");
+            validarEsOrganizadorOAyudante(partido, usuario);
         }
+    }
+
+    private void validarEquipoTactico(Partido partido, Equipo equipo, Usuario usuario) {
+        boolean gestorTorneo = partido.getTorneo().getEncargadoTorneo() != null
+                && Objects.equals(partido.getTorneo().getEncargadoTorneo().getId(), usuario.getId())
+                || ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), usuario).isPresent();
+        if (!gestorTorneo) validarEquipoDelDelegado(partido, equipo, usuario);
     }
 
     private void validarGestor(Partido partido, Usuario usuario) {

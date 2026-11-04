@@ -406,6 +406,28 @@ class ConvocatoriaPartidoServiceTest {
     }
 
     @Test
+    void registrarEvento_aplicaRojaAutomaticamenteEnLaSegundaAmarillaDelPartido() {
+        usuarioOrganizador();
+        convocar(jugadorLocal);
+        when(jugadorDao.findById(100L)).thenReturn(Optional.of(jugadorLocal));
+        EventoPartido primeraAmarilla = new EventoPartido();
+        primeraAmarilla.setTipo(TipoEventoPartido.TARJETA_AMARILLA);
+        primeraAmarilla.setJugador(jugadorLocal);
+        when(eventoDao.findByPartidoOrderByMinutoAscIdAsc(partido)).thenReturn(List.of(primeraAmarilla));
+        when(eventoDao.save(any(EventoPartido.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ConvocatoriaPartido convocatoria = convocatoria(1L, jugadorLocal);
+        when(convocatoriaDao.findByPartidoAndJugador(partido, jugadorLocal)).thenReturn(Optional.of(convocatoria));
+
+        EventoPartido resultado = service.registrarEvento(
+                5L, 100L, TipoEventoPartido.TARJETA_AMARILLA, 70, false, 99L);
+
+        assertEquals(TipoEventoPartido.TARJETA_ROJA, resultado.getTipo());
+        assertTrue(resultado.isDobleAmarilla());
+        assertTrue(convocatoria.isExpulsado());
+        verify(sancionService, times(2)).registrarTarjeta(any(EventoPartido.class));
+    }
+
+    @Test
     void registrarEvento_permiteAyudanteDelTorneoAunqueParticipeEnElPartido() {
         Usuario ayudante = new Usuario();
         ayudante.setId(88L);
@@ -955,6 +977,31 @@ class ConvocatoriaPartidoServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         service.intercambiarPosiciones(5L, 1L, 2L, 50L);
+
+        assertEquals(1, primera.getPosicionAlineacion());
+        assertEquals(0, segunda.getPosicionAlineacion());
+        verify(convocatoriaDao, times(2)).save(any(ConvocatoriaPartido.class));
+    }
+
+    @Test
+    void intercambiarPosiciones_permiteAlAyudanteDelTorneo() {
+        Usuario ayudante = new Usuario();
+        ayudante.setId(88L);
+        when(usuarioDao.findById(88L)).thenReturn(Optional.of(ayudante));
+        when(ayudanteTorneoDao.findByTorneoAndUsuario(partido.getTorneo(), ayudante))
+                .thenReturn(Optional.of(new com.example.torneos.entities.AyudanteTorneo()));
+        ConvocatoriaPartido primera = convocatoria(1L, jugadorLocal);
+        ConvocatoriaPartido segunda = convocatoria(2L, asistenteLocal);
+        primera.setPosicionAlineacion(0);
+        segunda.setPosicionAlineacion(1);
+        when(convocatoriaDao.findById(1L)).thenReturn(Optional.of(primera));
+        when(convocatoriaDao.findById(2L)).thenReturn(Optional.of(segunda));
+        when(convocatoriaDao.findByPartido(partido)).thenReturn(List.of(primera, segunda));
+        when(alineacionDao.findByPartidoAndEquipo(partido, local)).thenReturn(Optional.empty());
+        when(convocatoriaDao.save(any(ConvocatoriaPartido.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.intercambiarPosiciones(5L, 1L, 2L, 88L);
 
         assertEquals(1, primera.getPosicionAlineacion());
         assertEquals(0, segunda.getPosicionAlineacion());
